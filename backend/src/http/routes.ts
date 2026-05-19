@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import QRCode from "qrcode";
 import type { RuntimePaths } from "../runtime/paths.js";
 import { config } from "../config.js";
+import { logger } from "../logger.js";
 import { detectTailscaleIp } from "../integrations/tailscale.js";
 import { getServiceHealth, getSystemStats } from "../integrations/systemStats.js";
 import { listPlugins } from "../integrations/pluginRegistry.js";
@@ -69,6 +71,28 @@ export function createApiRouter(sessionManager: SessionManager, profileStore: Pr
       telegramChatConfigured: config.telegram.allowedChatIds.length > 0,
       telegramStreamConfigured: Boolean(config.telegram.streamChatId)
     });
+  });
+
+  router.get("/access/qr", async (req, res, next) => {
+    try {
+      const target = req.query.target === "local" ? "local" : "tailscale";
+      const localUrl = `http://127.0.0.1:${config.port}`;
+      const tailscaleIp = target === "tailscale" ? await withStatusTimeout("Tailscale QR detection", detectTailscaleIp(), undefined, 2500) : undefined;
+      const url = target === "tailscale" && tailscaleIp ? `http://${tailscaleIp}:${config.port}` : localUrl;
+      const mobileUrl = appendFragmentToken(url);
+      const svg = await QRCode.toString(mobileUrl, {
+        type: "svg",
+        margin: 1,
+        width: 180,
+        color: {
+          dark: "#04242b",
+          light: "#e9fff8"
+        }
+      });
+      res.json({ url: mobileUrl, displayUrl: url, target: tailscaleIp ? target : "local", svg });
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.get("/status", async (_req, res, next) => {
@@ -271,8 +295,27 @@ export function createApiRouter(sessionManager: SessionManager, profileStore: Pr
   return router;
 }
 
+function appendFragmentToken(url: string): string {
+  if (!config.apiToken) return url;
+  return `${url}/#token=${encodeURIComponent(config.apiToken)}`;
+}
+
 export async function buildStatus(sessionManager: SessionManager): Promise<WorkstationStatus> {
-  const tailscaleIp = await detectTailscaleIp();
+  const [tailscaleIp, system, services] = await Promise.all([
+    withStatusTimeout("Tailscale detection", detectTailscaleIp(), undefined, 2500),
+    withStatusTimeout(
+      "System status",
+      getSystemStats(),
+      {
+        cpuLoad: 0,
+        memoryUsedPct: 0,
+        memoryUsedGb: 0,
+        memoryTotalGb: 0
+      },
+      3000
+    ),
+    withStatusTimeout("Service health", getServiceHealth(), [], 2500)
+  ]);
   const localUrl = `http://127.0.0.1:${config.port}`;
   return {
     app: {
@@ -286,9 +329,29 @@ export async function buildStatus(sessionManager: SessionManager): Promise<Works
       tailscaleIp,
       tailscaleUrl: tailscaleIp ? `http://${tailscaleIp}:${config.port}` : undefined
     },
-    system: await getSystemStats(),
+    system,
     sessions: sessionManager.list("active"),
-    services: await getServiceHealth(),
+    services,
     plugins: listPlugins().map((plugin) => `${plugin.name}:${plugin.status}`)
   };
+}
+
+async function withStatusTimeout<T>(label: string, promise: Promise<T>, fallback: T, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise.catch((error) => {
+        logger.warn({ error }, `${label} failed`);
+        return fallback;
+      }),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          logger.warn({ ms }, `${label} timed out`);
+          resolve(fallback);
+        }, ms);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

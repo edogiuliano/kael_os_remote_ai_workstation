@@ -18,18 +18,23 @@ export interface WorkstationServerHandle {
 }
 
 export async function startWorkstationServer(): Promise<WorkstationServerHandle> {
+  logger.info("Starting KAEL OS backend");
   const paths = createRuntimePaths();
   await ensureRuntimePaths(paths);
+  logger.debug({ paths }, "Runtime paths ready");
 
   const sessionManager = new SessionManager(paths);
   const profileStore = new ProfileStore(paths);
   await sessionManager.load();
+  logger.debug("Session history loaded");
   await profileStore.load();
+  logger.debug("Profiles loaded");
 
   const app = createApp(sessionManager, profileStore, paths);
   const server = http.createServer(app);
   const wsHub = new WsHub(server);
   const telegram = new TelegramBotController(sessionManager, profileStore, paths);
+  logger.debug("HTTP, WebSocket, and integration services initialized");
 
   sessionManager.on("output", (event) => wsHub.broadcast(event));
   sessionManager.on("output", (event) => wsHub.broadcast({ type: "session.data", sessionId: event.sessionId, chunk: event.chunk, at: event.at }));
@@ -44,15 +49,18 @@ export async function startWorkstationServer(): Promise<WorkstationServerHandle>
   }, 5000);
   statusTimer.unref();
 
-  await telegram.start();
-
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
+    logger.debug({ host: config.host, port: config.port }, "Opening HTTP listener");
     server.listen(config.port, config.host, () => {
       server.off("error", reject);
       logger.info({ host: config.host, port: config.port }, "KAEL OS listening");
       resolve();
     });
+  });
+
+  void telegram.start().catch((error) => {
+    logger.warn({ error }, "Telegram bot did not start; KAEL OS will continue without Telegram notifications");
   });
 
   const stop = async () => {

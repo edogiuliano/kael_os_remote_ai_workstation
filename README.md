@@ -1,35 +1,36 @@
 # KAEL OS
 
-KAEL OS is a Windows 11 control center for running local AI coding agents from a desktop app, a mobile PWA, or Telegram.
+KAEL OS is a Windows 11 remote AI workstation for controlling local coding agents from a desktop app or an Android phone over Tailscale.
 
-It is designed for a home or office PC that stays powered on, runs local tools such as Codex CLI and Claude Code, and exposes a private dashboard through Tailscale instead of the public internet.
+The project is built for a personal PC that stays powered on, runs local tools such as Codex CLI and Claude Code, and exposes a private mobile-first control surface without opening public ports.
 
-![Dashboard](screenshots/dashboard.png)
+![KAEL OS dashboard](screenshots/dashboard.png)
 
-## Why This Exists
+## What It Solves
 
-AI coding agents are powerful, but they are usually tied to the machine where the terminal is running. This project turns that machine into a small remote AI operations console:
+AI coding agents usually live inside one terminal on one machine. KAEL OS turns that machine into a small remote operations console:
 
-- Start and monitor persistent agent sessions.
-- Send prompts from a phone.
-- Keep terminal sessions alive across reconnects.
-- Use Telegram as a lightweight remote control channel.
-- Access everything privately through Tailscale.
-- Package the experience as a Windows desktop app with Electron.
+- Start Codex, Claude Code, PowerShell, or custom local commands.
+- Keep PTY-backed terminal sessions alive while you reconnect from another device.
+- Send prompts from a phone through a private Tailscale URL.
+- Watch live terminal output in a mobile-friendly interface.
+- Generate a QR code for quick phone access.
+- Package the same dashboard as a Windows Electron app.
 
 ## Current Features
 
-- Electron desktop app for Windows.
-- Mobile-first dashboard/PWA.
+- Windows desktop app with Electron.
+- Mobile-first PWA dashboard.
+- Embedded terminal view for active agent sessions.
 - REST API protected by an `API_TOKEN`.
-- WebSocket live updates for status and session output.
-- PTY-backed sessions with `node-pty`.
-- Launchers for Codex CLI, Claude Code, PowerShell, and custom commands.
-- Visible terminal windows for active sessions.
+- WebSocket updates for status and session output.
+- Session manager with start, stop, logs, history, and health state.
 - Agent profiles with working directory, command override, and environment variables.
-- Telegram bot integration with persistent session mode.
-- Tailscale IP detection and private remote URLs.
+- Codex CLI, Claude Code, PowerShell, and custom command launchers.
+- Tailscale IP detection and private access URL generation.
+- QR code for Android access through Tailscale.
 - CPU, RAM, GPU, disk, and service status cards.
+- Optional Telegram bot notifications and fallback controls.
 - Windows setup, startup, build, and smoke-test scripts.
 
 ## Screenshots
@@ -44,14 +45,14 @@ AI coding agents are powerful, but they are usually tied to the machine where th
 - **Backend:** Express, WebSocket `ws`, Zod, Pino
 - **Sessions:** `node-pty`, PowerShell, Codex CLI, Claude Code
 - **Desktop:** Electron, electron-builder
-- **Frontend:** Static HTML/CSS/JavaScript PWA
-- **Integrations:** Telegram via Telegraf, Tailscale CLI detection, systeminformation
+- **Frontend:** Static HTML/CSS/JavaScript PWA, xterm.js
+- **Integrations:** Tailscale CLI detection, Telegram via Telegraf, NVIDIA `nvidia-smi`
 - **Platform:** Windows 11
 
-## Architecture Overview
+## Architecture
 
 ```text
-Android / Telegram / Desktop UI
+Android PWA / Electron Desktop
         |
         | REST + WebSocket
         v
@@ -59,10 +60,10 @@ Node.js backend on Windows
         |
         | PTY sessions
         v
-Codex CLI / Claude Code / PowerShell / custom local tools
+Codex CLI / Claude Code / PowerShell / custom tools
 ```
 
-The backend owns authentication, session lifecycle, profile storage, logs, WebSocket broadcasts, and integrations. Electron wraps the same dashboard in a Windows app and adds first-run setup plus visible terminal windows.
+The backend owns authentication, profile storage, session lifecycle, logs, WebSocket broadcasts, system metrics, Tailscale detection, and optional Telegram integration. Electron wraps the dashboard in a Windows app and provides the first-run setup experience.
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
@@ -71,8 +72,8 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Windows 11
 - Node.js 20 LTS or newer
 - PowerShell
-- Tailscale for private remote access
-- Optional: Codex CLI, Claude Code, Ollama, ComfyUI, NVIDIA tooling
+- Tailscale on the PC and phone for private remote access
+- Optional: Codex CLI, Claude Code, Ollama, ComfyUI, NVIDIA drivers/tools
 
 ## Quick Start
 
@@ -84,13 +85,25 @@ npm run smoke
 npm run dev
 ```
 
-Open:
+Open the local dashboard:
 
 ```text
 http://127.0.0.1:8787
 ```
 
-For a full Windows setup flow, see [docs/SETUP.md](docs/SETUP.md).
+For desktop development:
+
+```powershell
+npm run desktop:dev
+```
+
+For the Windows installer:
+
+```powershell
+npm run desktop:dist
+```
+
+For a fuller Windows setup guide, see [docs/SETUP.md](docs/SETUP.md).
 
 ## Main Commands
 
@@ -124,27 +137,37 @@ TELEGRAM_ALLOWED_CHAT_IDS=
 TELEGRAM_STREAM_CHAT_ID=
 ```
 
-Never commit `.env`. The desktop app stores first-run config under the user's app data directory, not in the installed program folder.
+Never commit `.env`. The Electron app stores first-run config under the user's app data directory instead of the installed program folder.
+
+## Phone Access
+
+1. Install and log in to Tailscale on the Windows PC.
+2. Install and log in to Tailscale on the Android phone.
+3. Start KAEL OS on the PC.
+4. Open the `Access` tab or the `Phone QR` button in the terminal view.
+5. Scan the QR code with the phone.
+
+The QR URL includes the local API token in the URL hash so the phone can authenticate without exposing the token to the server logs.
 
 ## Security Notes
 
-- Use Tailscale or another private network. Do not expose this app directly to the public internet.
+- Use Tailscale or another private network. Do not expose KAEL OS directly to the public internet.
 - Keep `API_TOKEN` and Telegram bot tokens private.
-- Restrict Telegram access with `TELEGRAM_ALLOWED_CHAT_IDS`.
+- Restrict Telegram access with `TELEGRAM_ALLOWED_CHAT_IDS` if Telegram is enabled.
 - Treat remote prompts as remote command capability because agents can run tools.
 - Use dedicated project folders for agent work.
 
-## What This Demonstrates
+## Portfolio Highlights
 
-This project is useful portfolio material for:
+KAEL OS demonstrates:
 
-- AI automation workflows.
-- Internal tools and operations dashboards.
-- Desktop + web hybrid apps.
-- Remote agent orchestration.
-- Telegram bot control surfaces.
-- Windows-first developer tooling.
-- “Vibe coding” agent workflows with real local process control.
+- AI automation and agent orchestration.
+- Windows-first internal tooling.
+- Desktop + web hybrid app design.
+- Remote terminal/session management with PTY.
+- Mobile PWA UX for local developer tools.
+- Private-network access patterns with Tailscale.
+- Practical "vibe coding" workflows with real local process control.
 
 ## Future Work
 
@@ -154,7 +177,7 @@ These are intentionally not claimed as complete in the current version:
 - Full Ollama model browser and prompt runner.
 - Discord webhook notifications.
 - File manager for upload/download from the dashboard.
-- Remote screenshot delivery through Telegram.
+- Remote screenshot delivery.
 - Voice notifications.
 - Plugin loader with a real extension API.
 - Auto-update flow for the Electron app.

@@ -25,11 +25,31 @@ export function createApp(sessionManager: SessionManager, profileStore: ProfileS
     res.sendFile(path.join(paths.frontend, "index.html"));
   });
 
-  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const message = error instanceof Error ? error.message : "Unknown error";
-    logger.error({ error }, "HTTP request failed");
+    logger.error(
+      {
+        method: req.method,
+        path: req.originalUrl,
+        message,
+        error: serializeError(error)
+      },
+      "HTTP request failed"
+    );
     res.status(400).json({ error: message });
   });
 
   return app;
+}
+
+function serializeError(error: unknown): unknown {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      ...(Object.fromEntries(Object.entries(error)) as Record<string, unknown>)
+    };
+  }
+  return error;
 }

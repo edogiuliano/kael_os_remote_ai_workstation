@@ -30,6 +30,10 @@ const sessionWindows = new Map<string, BrowserWindow>();
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 app.setName("KAEL OS");
 
+function legacyUserDataPath(): string {
+  return path.join(app.getPath("appData"), "Remote AI Workstation");
+}
+
 function appPath(...segments: string[]): string {
   if (app.isPackaged) {
     return path.join(app.getAppPath(), ...segments);
@@ -43,6 +47,23 @@ function frontendIndexPath(): string {
 
 function configPath(): string {
   return path.join(app.getPath("userData"), ".env");
+}
+
+async function copyIfMissing(source: string, destination: string): Promise<void> {
+  if (!existsSync(source) || existsSync(destination)) return;
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.cp(source, destination, { recursive: true });
+}
+
+async function migrateLegacyUserData(): Promise<void> {
+  const legacyRoot = legacyUserDataPath();
+  const currentRoot = app.getPath("userData");
+  if (legacyRoot === currentRoot || !existsSync(legacyRoot)) return;
+
+  await copyIfMissing(path.join(legacyRoot, ".env"), path.join(currentRoot, ".env"));
+  await copyIfMissing(path.join(legacyRoot, "profiles.json"), path.join(currentRoot, "profiles.json"));
+  await copyIfMissing(path.join(legacyRoot, "sessions"), path.join(currentRoot, "sessions"));
+  await writeDesktopLog("Legacy user data migration checked", { legacyRoot, currentRoot });
 }
 
 function desktopLogPath(): string {
@@ -274,6 +295,16 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    if (level >= 2) {
+      void writeDesktopLog("Renderer console", { level, message, line, sourceId });
+    }
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    void writeDesktopLog("Renderer failed to load", { errorCode, errorDescription, validatedURL });
+  });
+
   void openDashboard();
 }
 
@@ -353,6 +384,7 @@ ipcMain.handle("workstation:resetSetup", async () => {
 
 app.whenReady().then(async () => {
   await writeDesktopLog("Electron ready", { packaged: app.isPackaged, appPath: app.getAppPath() });
+  await migrateLegacyUserData();
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

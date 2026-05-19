@@ -57,7 +57,7 @@ export function resolveLaunchSpec(request: SessionCreateRequest): LaunchSpec {
       kind: "codex",
       name: request.name || "Codex CLI",
       command: resolveCommand(request.command || config.commands.codex, "codex"),
-      args: withCodexCompatibilityArgs(request.args ?? []),
+      args: request.args ?? [],
       cwd,
       env,
       prompt: request.prompt,
@@ -77,12 +77,6 @@ export function resolveLaunchSpec(request: SessionCreateRequest): LaunchSpec {
     profileId: request.profileId,
     profileName: request.profileName
   };
-}
-
-function withCodexCompatibilityArgs(args: string[]): string[] {
-  const hasComposerSubmitOverride = args.some((arg) => arg.includes("tui.keymap.composer.submit"));
-  if (hasComposerSubmitOverride) return args;
-  return ["-c", 'tui.keymap.composer.submit="ctrl-m"', ...args];
 }
 
 function defaultWorkingDirectory(): string {

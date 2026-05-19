@@ -1,5 +1,7 @@
+const bootToken = readBootToken();
+
 const state = {
-  token: localStorage.getItem("raw-api-token") || "",
+  token: bootToken || localStorage.getItem("raw-api-token") || "",
   sessions: [],
   profiles: [],
   selectedSessionId: "",
@@ -15,8 +17,42 @@ const state = {
   launching: false,
   sparks: { cpu: [], ram: [], gpu: [], disk: [] },
   latestSystem: null,
-  chatBySession: {}
+  chatBySession: {},
+  terminal: null,
+  terminalFit: null,
+  terminalSessionId: "",
+  terminalResizeObserver: null,
+  terminalLastSize: "",
+  terminalFitQueued: false,
+  terminalTouchY: 0,
+  pendingAttachments: []
 };
+
+if (bootToken) {
+  localStorage.setItem("raw-api-token", bootToken);
+  const cleanUrl = `${location.pathname}${location.search}`;
+  history.replaceState(null, "", cleanUrl || "/");
+}
+
+const assetIcons = {
+  claude: "claude.svg",
+  codex: "openai.svg",
+  openai: "openai.svg",
+  comfy: "comfyui.svg",
+  ollama: "ollama.svg",
+  tailscale: "tailscale.svg",
+  telegram: "telegram.svg"
+};
+
+function assetPath(path) {
+  return new URL(path, document.baseURI).toString();
+}
+
+function readBootToken() {
+  const hashParams = new URLSearchParams(location.hash.startsWith("#") ? location.hash.slice(1) : location.hash);
+  const queryParams = new URLSearchParams(location.search);
+  return hashParams.get("token") || queryParams.get("token") || "";
+}
 
 const el = {
   appMain: document.querySelector(".app-main"),
@@ -79,13 +115,20 @@ const el = {
   chatGpu: document.getElementById("chatGpu"),
   chatRam: document.getElementById("chatRam"),
   chatCpu: document.getElementById("chatCpu"),
-  chatMessages: document.getElementById("chatMessages"),
+  chatTerminalHost: document.getElementById("chatTerminalHost"),
+  chatTerminalEmpty: document.getElementById("chatTerminalEmpty"),
   chatPromptInput: document.getElementById("chatPromptInput"),
   chatSendBtn: document.getElementById("chatSendBtn"),
   chatAttachBtn: document.getElementById("chatAttachBtn"),
+  chatFileInput: document.getElementById("chatFileInput"),
+  chatAttachmentList: document.getElementById("chatAttachmentList"),
   chatSwitchProfileBtn: document.getElementById("chatSwitchProfileBtn"),
-  chatTerminalBtn: document.getElementById("chatTerminalBtn"),
-  chatLogsBtn: document.getElementById("chatLogsBtn"),
+  chatQrBtn: document.getElementById("chatQrBtn"),
+  phoneQrPanel: document.getElementById("phoneQrPanel"),
+  phoneQrCode: document.getElementById("phoneQrCode"),
+  phoneQrUrl: document.getElementById("phoneQrUrl"),
+  accessQrCode: document.getElementById("accessQrCode"),
+  accessQrUrl: document.getElementById("accessQrUrl"),
   chatStopBtn: document.getElementById("chatStopBtn"),
   refreshBtn: document.getElementById("refreshBtn"),
   clearLogsBtn: document.getElementById("clearLogsBtn"),
@@ -109,6 +152,7 @@ const el = {
 
 el.tokenInput.value = state.token;
 if (state.token) document.getElementById("authPanel").hidden = true;
+setAppViewportHeight();
 hydrateStaticIcons();
 setActiveView("home");
 
@@ -216,6 +260,7 @@ function setActiveView(view) {
   const allowed = new Set(["home", "sessions", "chat", "logs", "profiles", "access"]);
   state.activeView = allowed.has(view) ? view : "home";
   if (el.appMain) el.appMain.dataset.view = state.activeView;
+  document.body.dataset.view = state.activeView;
   document.querySelectorAll(".rail-link[data-view], .mobile-nav button[data-view]").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === state.activeView);
     if (item.getAttribute("aria-label")) {
@@ -224,6 +269,8 @@ function setActiveView(view) {
   });
   if (state.activeView === "profiles") document.getElementById("profilesPanel")?.classList.add("expanded");
   if (state.activeView === "chat") renderChat();
+  if (state.activeView === "chat") scheduleFitChatTerminal();
+  if (state.activeView === "access") loadPhoneQr({ showPanel: false }).catch(() => undefined);
 }
 
 function hydrateStaticIcons(root = document) {
@@ -233,6 +280,10 @@ function hydrateStaticIcons(root = document) {
 }
 
 function iconSvg(name) {
+  if (assetIcons[name]) {
+    return `<img class="asset-icon logo-${name}" src="${assetPath(`assets/icons/${assetIcons[name]}`)}" alt="" aria-hidden="true" loading="lazy" decoding="async" />`;
+  }
+
   const icons = {
     home: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 10.5V20h5v-5h3v5h5v-9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
     sessions: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="5" cy="6" r="1.8" fill="currentColor"/><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="5" cy="18" r="1.8" fill="currentColor"/></svg>',
@@ -320,9 +371,21 @@ function renderStatus(status) {
   setLink(el.localUrl, status.access.localUrl);
   setLink(el.tailscaleUrl, status.access.tailscaleUrl);
   el.tailscaleState.textContent = status.access.tailscaleUrl ? "Detected" : "Missing";
+  renderPhoneAccess(status.access.tailscaleUrl || status.access.localUrl);
   renderSessions();
   renderChatHeader();
   renderServices(status.services || []);
+}
+
+function renderPhoneAccess(url) {
+  if (el.phoneQrUrl) {
+    el.phoneQrUrl.textContent = url || "Not detected";
+    el.phoneQrUrl.href = url || "#";
+  }
+  if (el.accessQrUrl) {
+    el.accessQrUrl.textContent = url || "Not detected";
+    el.accessQrUrl.href = url || "#";
+  }
 }
 
 function updateChatSpecs(cpu, ram, gpu) {
@@ -473,12 +536,9 @@ function enterChat(sessionId) {
   state.selectedSessionId = sessionId;
   state.activeAgentKind = session?.kind || state.activeAgentKind || "";
   if (el.sessionSelect) el.sessionSelect.value = sessionId;
-  if (session && ensureChat(sessionId).length === 0) {
-    appendChatMessage(sessionId, "system", `Connected to ${session.name}. Send prompts here; raw terminal output stays in Logs.`);
-  }
   setActiveView("chat");
   renderChatHeader();
-  renderChat();
+  void connectChatTerminal(sessionId);
 }
 
 function renderChatHeader() {
@@ -509,71 +569,172 @@ function ensureChat(sessionId) {
   return state.chatBySession[sessionId];
 }
 
-function appendChatMessage(sessionId, role, text) {
-  if (!sessionId || !text) return;
-  const messages = ensureChat(sessionId);
-  messages.push({ role, text, at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
-  if (messages.length > 80) messages.splice(0, messages.length - 80);
-  if (sessionId === state.activeChatSessionId) renderChat();
-}
-
-function appendAgentOutput(sessionId, chunk) {
-  if (!sessionId || !chunk) return;
-  const text = cleanChatOutput(chunk);
-  if (!text) return;
-  const messages = ensureChat(sessionId);
-  const last = messages[messages.length - 1];
-  if (last?.role === "agent" && last.streaming) {
-    last.text = compactChatText(`${last.text}${text}`);
-    last.at = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } else {
-    messages.push({ role: "agent", text: compactChatText(text), streaming: true, at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
-  }
-  if (messages.length > 80) messages.splice(0, messages.length - 80);
-  if (sessionId === state.activeChatSessionId) renderChat();
-}
-
 function renderChat() {
-  if (!el.chatMessages) return;
   const sessionId = state.activeChatSessionId;
-  if (!sessionId) {
-    el.chatMessages.innerHTML = `
-      <div class="chat-empty">
-        <strong>Select an agent app to start.</strong>
-        <span>Tap Claude or Codex from Mission Control and your prompt console will open here.</span>
-      </div>
-    `;
-    return;
-  }
-
-  const messages = ensureChat(sessionId);
-  if (messages.length === 0) {
-    el.chatMessages.innerHTML = `
-      <div class="chat-empty">
-        <strong>Ready for prompts.</strong>
-        <span>This chat is connected to ${escapeHtml(shortId(sessionId))}. Ask the agent what to do next.</span>
-      </div>
-    `;
-    return;
-  }
-
-  const atBottom = el.chatMessages.scrollTop + el.chatMessages.clientHeight >= el.chatMessages.scrollHeight - 28;
-  el.chatMessages.innerHTML = messages
-    .map((message) => {
-      const role = escapeHtml(message.role);
-      return `
-        <article class="chat-bubble ${role}">
-          <div class="bubble-text">${formatChatText(message.text)}</div>
-          <time>${escapeHtml(message.at || "")}</time>
-        </article>
-      `;
-    })
-    .join("");
-  if (atBottom) el.chatMessages.scrollTop = el.chatMessages.scrollHeight;
+  el.chatTerminalEmpty.hidden = Boolean(sessionId);
+  if (sessionId) void connectChatTerminal(sessionId);
 }
 
-function formatChatText(text) {
-  return escapeHtml(text).replace(/\n{3,}/g, "\n\n").replace(/\n/g, "<br>");
+async function connectChatTerminal(sessionId) {
+  if (!sessionId || !el.chatTerminalHost) return;
+  const term = ensureChatTerminal();
+  if (!term) return;
+  if (state.terminalSessionId === sessionId) {
+    fitChatTerminal();
+    return;
+  }
+
+  state.terminalSessionId = sessionId;
+  term.reset();
+  term.writeln(`\x1b[38;2;101;228;189mKAEL OS terminal connected to ${shortId(sessionId)}\x1b[0m`);
+  term.writeln("");
+  fitChatTerminal();
+
+  try {
+    const logs = await api(`/api/sessions/${sessionId}/logs`, { headers: { Accept: "text/plain" } });
+    if (state.terminalSessionId === sessionId && logs) {
+      term.write(logFileToTerminal(logs));
+      fitChatTerminal();
+    }
+  } catch (error) {
+    term.writeln(`\r\n\x1b[31m[logs] ${cleanError(error)}\x1b[0m`);
+  }
+}
+
+function ensureChatTerminal() {
+  if (state.terminal) return state.terminal;
+  if (!window.Terminal || !window.FitAddon?.FitAddon) {
+    if (el.chatTerminalEmpty) {
+      el.chatTerminalEmpty.hidden = false;
+      el.chatTerminalEmpty.innerHTML = "<strong>Terminal failed to load.</strong><span>Refresh KAEL OS and try again.</span>";
+    }
+    return null;
+  }
+
+  const term = new Terminal({
+    convertEol: true,
+    cursorBlink: true,
+    scrollback: 6000,
+    fontFamily: "Cascadia Code, Consolas, monospace",
+    fontSize: 13,
+    lineHeight: 1.12,
+    theme: {
+      background: "#031419",
+      foreground: "#e7fff7",
+      cursor: "#65e4bd",
+      selectionBackground: "#19515b",
+      black: "#06191f",
+      blue: "#49c9e8",
+      cyan: "#54dfe4",
+      green: "#65e4bd",
+      magenta: "#c4a7ff",
+      red: "#ff6b7a",
+      yellow: "#f5c15c",
+      white: "#effffb"
+    }
+  });
+  const fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  term.open(el.chatTerminalHost);
+  term.onData((data) => sendRawTerminalInput(data).catch((error) => term.writeln(`\r\n\x1b[31m[input] ${cleanError(error)}\x1b[0m`)));
+  state.terminal = term;
+  state.terminalFit = fitAddon;
+  state.terminalResizeObserver = new ResizeObserver(scheduleFitChatTerminal);
+  state.terminalResizeObserver.observe(el.chatTerminalHost);
+  el.chatTerminalHost.addEventListener("click", () => term.focus());
+  el.chatTerminalHost.addEventListener("touchstart", handleTerminalTouchStart, { passive: true });
+  el.chatTerminalHost.addEventListener("touchmove", handleTerminalTouchMove, { passive: false });
+  scheduleFitChatTerminal();
+  return term;
+}
+
+function setAppViewportHeight() {
+  document.documentElement.style.setProperty("--app-vh", `${window.innerHeight}px`);
+}
+
+function handleViewportResize() {
+  setAppViewportHeight();
+  scheduleFitChatTerminal();
+}
+
+function handleTerminalTouchStart(event) {
+  if (!event.touches?.length) return;
+  state.terminalTouchY = event.touches[0].clientY;
+}
+
+function handleTerminalTouchMove(event) {
+  if (!state.terminal || !event.touches?.length) return;
+  const nextY = event.touches[0].clientY;
+  const delta = state.terminalTouchY - nextY;
+  const lineHeight = Math.max(12, Math.round((state.terminal.options.fontSize || 13) * (state.terminal.options.lineHeight || 1.12)));
+  const lines = Math.trunc(delta / lineHeight);
+  if (!lines) return;
+  state.terminal.scrollLines(lines);
+  state.terminalTouchY = nextY;
+  event.preventDefault();
+}
+
+function scheduleFitChatTerminal() {
+  if (state.terminalFitQueued) return;
+  state.terminalFitQueued = true;
+  requestAnimationFrame(() => {
+    state.terminalFitQueued = false;
+    fitChatTerminal();
+  });
+}
+
+function fitChatTerminal() {
+  if (!state.terminal || !state.terminalFit || !el.chatTerminalHost || el.chatTerminalHost.offsetParent === null) return;
+  try {
+    state.terminalFit.fit();
+    const cols = clampNumber(state.terminal.cols, 20, 300);
+    const rows = clampNumber(state.terminal.rows, 5, 120);
+    if (state.terminal.cols !== cols || state.terminal.rows !== rows) {
+      state.terminal.resize(cols, rows);
+    }
+
+    const id = state.activeChatSessionId || state.terminalSessionId;
+    if (!id) return;
+    const nextSize = `${id}:${cols}x${rows}`;
+    if (state.terminalLastSize === nextSize) return;
+    state.terminalLastSize = nextSize;
+    api(`/api/sessions/${id}/resize`, {
+      method: "POST",
+      body: JSON.stringify({ cols, rows })
+    }).catch(() => undefined);
+  } catch {
+    // Early layout can briefly produce a zero-size terminal host.
+  }
+}
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, Math.floor(number)));
+}
+
+async function sendRawTerminalInput(data) {
+  const id = state.activeChatSessionId || state.terminalSessionId;
+  if (!id || !data) return;
+  await api(`/api/sessions/${id}/raw-input`, {
+    method: "POST",
+    body: JSON.stringify({ data })
+  });
+}
+
+function writeChatTerminal(sessionId, chunk) {
+  if (!chunk || sessionId !== state.terminalSessionId) return;
+  const term = ensureChatTerminal();
+  if (!term) return;
+  term.write(chunk);
+}
+
+function logFileToTerminal(logs) {
+  return String(logs)
+    .replace(/\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s+\[stdout\]\s*/g, "")
+    .replace(/\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s+\[stderr\]\s*/g, "\r\n[stderr] ")
+    .replace(/\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s+\[system\]\s*/g, "\r\n\x1b[38;2;245;193;92m[system]\x1b[0m ")
+    .replace(/\n/g, "\r\n");
 }
 
 function iconForKind(kind) {
@@ -599,6 +760,33 @@ function renderServices(services) {
     item.className = "service-row";
     item.innerHTML = `<strong>${escapeHtml(service.name)}</strong><span>${escapeHtml(labelService(service.status))}</span>`;
     el.services.appendChild(item);
+  }
+}
+
+async function loadPhoneQr(options = {}) {
+  const target = options.target || "tailscale";
+  if (options.showPanel !== false && el.phoneQrPanel) el.phoneQrPanel.hidden = false;
+  const slots = [el.phoneQrCode, el.accessQrCode].filter(Boolean);
+  for (const slot of slots) {
+    slot.innerHTML = `<span class="qr-loading">Generating...</span>`;
+  }
+
+  try {
+    const result = await api(`/api/access/qr?target=${encodeURIComponent(target)}`);
+    for (const slot of slots) {
+      slot.innerHTML = result.svg;
+    }
+    renderPhoneAccess(result.displayUrl || result.url);
+    if (result.target === "local") {
+      showToast("Tailscale URL not detected yet, QR points to local PC access.", "error");
+    } else {
+      showToast("Tailscale QR ready.");
+    }
+  } catch (error) {
+    for (const slot of slots) {
+      slot.innerHTML = `<span class="qr-loading error">QR failed</span>`;
+    }
+    showToast(cleanError(error), "error");
   }
 }
 
@@ -652,7 +840,6 @@ async function startSession(kind, options = {}) {
     if (options.openChat) state.activeChatSessionId = result.session.id;
     showToast(`${result.session.name} is ready.`);
     appendLog(`[system] ${result.session.name} ready: ${result.session.id}\n`);
-    appendChatMessage(result.session.id, "system", `${result.session.name} started. Send a prompt when you are ready.`);
     if (options.openWindow !== false) {
       await api(`/api/sessions/${result.session.id}/open-window`, { method: "POST" }).catch((error) => appendLog(`[warn] ${cleanError(error)}\n`));
     }
@@ -701,20 +888,119 @@ async function sendChatInput() {
   state.sendingPrompt = true;
   setBusy(el.chatSendBtn, true, "Sending...");
   try {
-    appendChatMessage(id, "user", text);
+    const prompt = buildPromptWithAttachments(text);
     await api(`/api/sessions/${id}/input`, {
       method: "POST",
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text: prompt })
     });
     el.chatPromptInput.value = "";
-    appendChatMessage(id, "system", "Prompt sent. Waiting for the agent...");
+    clearAttachments();
+    fitChatTerminal();
   } catch (error) {
-    appendChatMessage(id, "system", cleanError(error));
+    state.terminal?.writeln(`\r\n\x1b[31m[send] ${cleanError(error)}\x1b[0m`);
     throw error;
   } finally {
     state.sendingPrompt = false;
     setBusy(el.chatSendBtn, false);
   }
+}
+
+function buildPromptWithAttachments(text) {
+  if (!state.pendingAttachments.length) return text;
+  const parts = [text, "", "Attachments:"];
+  for (const attachment of state.pendingAttachments) {
+    if (attachment.kind === "text") {
+      parts.push(`\n--- ${attachment.name} ---\n${attachment.content}\n--- end ${attachment.name} ---`);
+    } else if (attachment.kind === "image") {
+      parts.push(`\nImage: ${attachment.name} (${attachment.type}, ${formatBytes(attachment.size)})`);
+      if (attachment.content) parts.push(attachment.content);
+      else parts.push("Image file selected in KAEL OS. If the agent cannot read images from terminal input, open the image locally and describe what you need.");
+    }
+  }
+  return parts.join("\n");
+}
+
+async function handleChatFiles(files) {
+  const selected = [...files].slice(0, 4);
+  const attachments = [];
+  for (const file of selected) {
+    if (file.type.startsWith("image/")) {
+      attachments.push({
+        kind: "image",
+        name: file.name,
+        type: file.type || "image",
+        size: file.size,
+        content: file.size <= 1_500_000 ? await readFileAsDataUrl(file) : ""
+      });
+      continue;
+    }
+
+    if (file.size > 150_000) {
+      attachments.push({
+        kind: "text",
+        name: file.name,
+        type: file.type || "text",
+        size: file.size,
+        content: `[Skipped: ${file.name} is ${formatBytes(file.size)}. Keep text attachments under 150 KB.]`
+      });
+      continue;
+    }
+
+    attachments.push({
+      kind: "text",
+      name: file.name,
+      type: file.type || "text",
+      size: file.size,
+      content: await file.text()
+    });
+  }
+  state.pendingAttachments = attachments;
+  renderAttachments();
+}
+
+function renderAttachments() {
+  if (!el.chatAttachmentList) return;
+  if (!state.pendingAttachments.length) {
+    el.chatAttachmentList.hidden = true;
+    el.chatAttachmentList.innerHTML = "";
+    return;
+  }
+  el.chatAttachmentList.hidden = false;
+  el.chatAttachmentList.innerHTML = state.pendingAttachments
+    .map((attachment, index) => {
+      const label = attachment.kind === "image" ? "Image" : "File";
+      return `
+        <span class="attachment-chip">
+          <strong>${label}</strong>
+          ${escapeHtml(attachment.name)}
+          <small>${escapeHtml(formatBytes(attachment.size))}</small>
+          <button type="button" data-remove-attachment="${index}" aria-label="Remove ${escapeHtml(attachment.name)}">x</button>
+        </span>
+      `;
+    })
+    .join("");
+}
+
+function clearAttachments() {
+  state.pendingAttachments = [];
+  if (el.chatFileInput) el.chatFileInput.value = "";
+  renderAttachments();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", () => reject(reader.error || new Error("Could not read file.")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return "--";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`;
 }
 
 async function openWindow(id = el.sessionSelect.value || state.selectedSessionId) {
@@ -741,7 +1027,6 @@ function startProfile(id, options = {}) {
     .then((result) => {
       state.selectedSessionId = result.session.id;
       if (options.openChat) state.activeChatSessionId = result.session.id;
-      appendChatMessage(result.session.id, "system", `${result.session.name} started from profile. Send your next prompt here.`);
       showToast(`${result.session.name} started.`);
       return refreshAll();
     })
@@ -819,14 +1104,9 @@ function connectWebSocket() {
     const message = JSON.parse(event.data);
     if (message.type === "session.output") {
       appendLog(`[${message.sessionId.slice(0, 8)}] ${message.chunk}`);
-      appendAgentOutput(message.sessionId, message.chunk);
+      writeChatTerminal(message.sessionId, message.chunk);
     }
     if (message.type === "session.status") {
-      if (message.session?.id && message.session.status !== "running" && message.session.status !== "starting") {
-        const messages = ensureChat(message.session.id);
-        const last = messages[messages.length - 1];
-        if (last?.role === "agent") last.streaming = false;
-      }
       refreshAll().catch(console.error);
     }
     if (message.type === "status") renderStatus(message.status);
@@ -1036,22 +1316,25 @@ el.sendBtn.addEventListener("click", () => sendInput().catch((error) => appendLo
 el.openWindowBtn.addEventListener("click", () => openWindow().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
 el.chatSendBtn.addEventListener("click", () => sendChatInput().catch((error) => showToast(cleanError(error), "error")));
 el.chatPromptInput.addEventListener("keydown", (event) => {
-  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+  if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     sendChatInput().catch((error) => showToast(cleanError(error), "error"));
   }
 });
-el.chatTerminalBtn.addEventListener("click", () => openWindow(state.activeChatSessionId).catch((error) => showToast(cleanError(error), "error")));
-el.chatLogsBtn.addEventListener("click", () => {
-  if (!state.activeChatSessionId) return showToast("Choose an agent first.", "error");
-  loadLogs(state.activeChatSessionId).then(() => setActiveView("logs")).catch((error) => showToast(cleanError(error), "error"));
+el.chatFileInput?.addEventListener("change", () => handleChatFiles(el.chatFileInput.files || []).catch((error) => showToast(cleanError(error), "error")));
+el.chatAttachmentList?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-remove-attachment]");
+  if (!button) return;
+  state.pendingAttachments.splice(Number(button.dataset.removeAttachment), 1);
+  renderAttachments();
 });
+el.chatQrBtn.addEventListener("click", () => loadPhoneQr({ showPanel: true }).catch((error) => showToast(cleanError(error), "error")));
 el.chatStopBtn.addEventListener("click", () => {
   if (!state.activeChatSessionId) return showToast("Choose an agent first.", "error");
   api(`/api/sessions/${state.activeChatSessionId}/stop`, { method: "POST" }).then(refreshAll).catch((error) => showToast(cleanError(error), "error"));
 });
 el.chatSwitchProfileBtn.addEventListener("click", () => setActiveView("profiles"));
-el.chatAttachBtn.addEventListener("click", () => showToast("File attachments are planned for the next mobile pass."));
+el.chatAttachBtn.addEventListener("click", () => el.chatFileInput?.click());
 el.refreshBtn.addEventListener("click", () => refreshAll().catch((error) => {
   showToast(cleanError(error), "error");
   appendLog(`[error] ${cleanError(error)}\n`);
@@ -1076,6 +1359,8 @@ el.profileFormToggle?.addEventListener("click", () => {
   el.profileFormToggle.textContent = "Edit";
 });
 el.createProfileBtn.addEventListener("click", () => createProfile().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
+window.addEventListener("resize", handleViewportResize);
+window.visualViewport?.addEventListener("resize", handleViewportResize);
 
 initialize().catch((error) => {
   setConnected(false);

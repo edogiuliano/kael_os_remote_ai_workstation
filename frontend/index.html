@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#071b22" />
     <title>KAEL OS</title>
     <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="/vendor/xterm/css/xterm.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -60,7 +61,7 @@
           <button class="rail-link" type="button" data-view="sessions" data-tip="Sessions - active agents and actions" aria-label="Sessions">
             <span class="icon-slot" data-icon="sessions"></span>
           </button>
-          <button class="rail-link" type="button" data-view="chat" data-tip="Agent Chat - send prompts from your phone" aria-label="Agent Chat">
+          <button class="rail-link" type="button" data-view="chat" data-tip="Agent Terminal - live CLI with prompt box" aria-label="Agent Terminal">
             <span class="icon-slot" data-icon="chat"></span>
           </button>
           <button class="rail-link" type="button" data-view="logs" data-tip="Logs - raw terminal output" aria-label="Logs">
@@ -229,7 +230,7 @@
             <div class="chat-agent">
               <span id="chatAgentIcon" class="service-icon" data-icon="chat" aria-hidden="true"></span>
               <div>
-                <p class="eyebrow">Agent Chat</p>
+                <p class="eyebrow">Agent Terminal</p>
                 <h2 id="chatAgentName">No agent selected</h2>
                 <div class="chat-meta">
                   <span id="chatProfileChip" class="mini-badge">Choose a service</span>
@@ -246,19 +247,36 @@
 
           <div class="chat-actions">
             <button id="chatSwitchProfileBtn" type="button"><span class="icon-slot" data-icon="profiles"></span><span>Switch</span></button>
-            <button id="chatTerminalBtn" type="button"><span class="icon-slot" data-icon="terminal"></span><span>Terminal</span></button>
-            <button id="chatLogsBtn" type="button"><span class="icon-slot" data-icon="logs"></span><span>Logs</span></button>
+            <button id="chatQrBtn" type="button"><span class="icon-slot" data-icon="access"></span><span>Phone QR</span></button>
             <button id="chatStopBtn" type="button" class="danger-action"><span class="icon-slot" data-icon="stop"></span><span>Stop</span></button>
           </div>
 
-          <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
+          <div id="phoneQrPanel" class="phone-qr-panel" hidden>
+            <div>
+              <p class="eyebrow">Phone Access</p>
+              <h3>Scan With Android</h3>
+              <a id="phoneQrUrl" href="#" target="_blank" rel="noreferrer">Waiting for Tailscale...</a>
+              <small>Open Tailscale on both devices first. This URL stays on your private network.</small>
+            </div>
+            <div id="phoneQrCode" class="phone-qr-code" aria-label="Phone access QR"></div>
+          </div>
+
+          <div class="agent-terminal-wrap">
+            <div id="chatTerminalHost" class="embedded-terminal" aria-label="Agent terminal"></div>
+            <div id="chatTerminalEmpty" class="terminal-empty">
+              <strong>Select an agent app to start.</strong>
+              <span>Claude and Codex will appear here as real terminal sessions.</span>
+            </div>
+          </div>
 
           <div class="chat-composer">
-            <textarea id="chatPromptInput" rows="2" placeholder="Send a prompt to the selected agent..."></textarea>
+            <textarea id="chatPromptInput" rows="2" placeholder="Prompt the selected agent. Enter sends, Shift+Enter adds a line."></textarea>
             <div class="chat-send-row">
               <button id="chatAttachBtn" type="button" class="ghost-button"><span class="icon-slot" data-icon="plus"></span></button>
               <button id="chatSendBtn" type="button" class="primary-action"><span class="icon-slot" data-icon="send"></span><span>Send</span></button>
             </div>
+            <input id="chatFileInput" type="file" multiple accept="image/*,.txt,.md,.json,.js,.ts,.tsx,.jsx,.css,.html,.py,.ps1,.yaml,.yml" hidden />
+            <div id="chatAttachmentList" class="attachment-list" hidden></div>
           </div>
         </section>
 
@@ -338,24 +356,34 @@
               <p class="eyebrow">Remote Access</p>
               <h2>Tailscale</h2>
             </div>
-          </div>
-          <div class="access-list">
-            <a id="localUrl" href="#">--</a>
-            <a id="tailscaleUrl" href="#">Not detected</a>
-          </div>
-          <div id="services" class="services"></div>
-        </section>
+            </div>
+            <div class="access-list">
+              <a id="localUrl" href="#">--</a>
+              <a id="tailscaleUrl" href="#">Not detected</a>
+            </div>
+            <div class="access-qr-card">
+              <div>
+                <p class="eyebrow">Android PWA</p>
+                <h3>Scan To Open KAEL OS</h3>
+                <a id="accessQrUrl" href="#" target="_blank" rel="noreferrer">Waiting for Tailscale...</a>
+              </div>
+              <div id="accessQrCode" class="phone-qr-code"></div>
+            </div>
+            <div id="services" class="services"></div>
+          </section>
       </section>
 
       <nav class="mobile-nav" aria-label="Mobile navigation">
         <button type="button" data-view="home" class="active"><span class="icon-slot" data-icon="home"></span><span>Home</span></button>
         <button type="button" data-view="sessions"><span class="icon-slot" data-icon="sessions"></span><span>Sessions</span></button>
-        <button type="button" data-view="chat"><span class="icon-slot" data-icon="chat"></span><span>Chat</span></button>
+        <button type="button" data-view="chat"><span class="icon-slot" data-icon="terminal"></span><span>Terminal</span></button>
         <button type="button" data-view="logs"><span class="icon-slot" data-icon="logs"></span><span>Logs</span></button>
         <button type="button" data-view="profiles"><span class="icon-slot" data-icon="profiles"></span><span>More</span></button>
       </nav>
     </main>
 
+    <script src="/vendor/xterm/lib/xterm.js"></script>
+    <script src="/vendor/xterm-addon-fit/lib/addon-fit.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
