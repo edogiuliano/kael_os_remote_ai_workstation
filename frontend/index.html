@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0c1117" />
-    <title>Remote AI Workstation</title>
+    <meta name="theme-color" content="#071b22" />
+    <title>KAEL OS</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -52,21 +52,21 @@
 
     <main class="app-frame">
       <aside class="app-rail" aria-label="Primary navigation">
-        <div class="rail-mark" aria-label="Remote AI Workstation">C</div>
+        <div class="rail-mark" aria-label="KAEL OS">K</div>
         <nav class="rail-nav">
-          <button class="rail-link active" type="button" data-view="home" data-tip="Home - overview, metrics and quick launch" aria-label="Home">
+          <button class="rail-link active" type="button" data-view="home" data-tip="Home - mission control and quick launch" aria-label="Home">
             <span class="icon-slot" data-icon="home"></span>
           </button>
-          <button class="rail-link" type="button" data-view="sessions" data-tip="Sessions - inspect and manage active agents" aria-label="Sessions">
+          <button class="rail-link" type="button" data-view="sessions" data-tip="Sessions - active agents and actions" aria-label="Sessions">
             <span class="icon-slot" data-icon="sessions"></span>
           </button>
-          <button class="rail-link" type="button" data-view="controls" data-tip="Controls - send prompts and remote commands" aria-label="Controls">
-            <span class="icon-slot" data-icon="controls"></span>
+          <button class="rail-link" type="button" data-view="chat" data-tip="Agent Chat - send prompts from your phone" aria-label="Agent Chat">
+            <span class="icon-slot" data-icon="chat"></span>
           </button>
-          <button class="rail-link" type="button" data-view="logs" data-tip="Logs - read live output without stretching the app" aria-label="Logs">
+          <button class="rail-link" type="button" data-view="logs" data-tip="Logs - raw terminal output" aria-label="Logs">
             <span class="icon-slot" data-icon="logs"></span>
           </button>
-          <button class="rail-link" type="button" data-view="profiles" data-tip="Profiles - saved repos, commands and env values" aria-label="Profiles">
+          <button class="rail-link" type="button" data-view="profiles" data-tip="Profiles - repos, commands and env values" aria-label="Profiles">
             <span class="icon-slot" data-icon="profiles"></span>
           </button>
           <button class="rail-link" type="button" data-view="access" data-tip="Access - local and Tailscale URLs" aria-label="Access">
@@ -79,7 +79,7 @@
         <header class="topbar">
           <div class="brand-lockup">
             <div class="brand-text">
-              <p class="eyebrow">Remote AI Workstation</p>
+              <p class="eyebrow">KAEL OS</p>
               <h1>Mobile Mission Control</h1>
             </div>
             <div class="meta-row">
@@ -116,37 +116,62 @@
               <span id="launchStatus" class="soft-label">Ready</span>
             </div>
             <div class="quick-grid" aria-label="Quick services">
-              <button class="service-card service-comfy" data-service="comfyui">
-                <span class="service-icon" data-icon="comfy" aria-hidden="true"></span>
-                <strong>ComfyUI</strong>
-                <small id="comfyState">Checking</small>
+              <button class="service-card service-claude" data-kind="claude">
+                <span class="service-icon" data-icon="claude" aria-hidden="true"></span>
+                <span class="service-copy">
+                  <strong>Claude</strong>
+                  <small id="claudeState">Ready</small>
+                </span>
+                <span class="service-more" aria-hidden="true">...</span>
               </button>
               <button class="service-card service-codex" data-kind="codex">
                 <span class="service-icon" data-icon="codex" aria-hidden="true"></span>
-                <strong>Codex</strong>
-                <small id="codexState">Ready</small>
+                <span class="service-copy">
+                  <strong>Codex</strong>
+                  <small id="codexState">Ready</small>
+                </span>
+                <span class="service-more" aria-hidden="true">...</span>
               </button>
-              <button class="service-card service-claude" data-kind="claude">
-                <span class="service-icon" data-icon="claude" aria-hidden="true"></span>
-                <strong>Claude</strong>
-                <small id="claudeState">Ready</small>
+              <button class="service-card service-comfy" data-service="comfyui">
+                <span class="service-icon" data-icon="comfy" aria-hidden="true"></span>
+                <span class="service-copy">
+                  <strong>ComfyUI</strong>
+                  <small id="comfyState">Checking</small>
+                </span>
               </button>
               <button class="service-card service-ollama" data-service="ollama">
                 <span class="service-icon" data-icon="ollama" aria-hidden="true"></span>
-                <strong>Ollama</strong>
-                <small id="ollamaState">Checking</small>
+                <span class="service-copy">
+                  <strong>Ollama</strong>
+                  <small id="ollamaState">Checking</small>
+                </span>
+              </button>
+              <button class="service-card service-tailscale" type="button" data-view-target="access">
+                <span class="service-icon" data-icon="tailscale" aria-hidden="true"></span>
+                <span class="service-copy">
+                  <strong>Tailscale</strong>
+                  <small id="tailscaleState">Private</small>
+                </span>
               </button>
               <a class="service-card service-telegram link-card" id="telegramCard" href="https://web.telegram.org/" target="_blank" rel="noreferrer">
                 <span class="service-icon" data-icon="telegram" aria-hidden="true"></span>
-                <strong>Telegram</strong>
-                <small>Connected</small>
+                <span class="service-copy">
+                  <strong>Telegram</strong>
+                  <small>Notify only</small>
+                </span>
               </a>
-              <button class="service-card service-tailscale" type="button" data-view-target="access">
-                <span class="service-icon" data-icon="tailscale" aria-hidden="true"></span>
-                <strong>Tailscale</strong>
-                <small id="tailscaleState">Private</small>
-              </button>
             </div>
+          </section>
+
+          <section id="sessionsPanel" class="panel timeline-panel">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Active Sessions</p>
+                <h2>Agents Online</h2>
+              </div>
+              <button id="clearFailedBtn" class="ghost-button">Clear</button>
+            </div>
+            <div id="sessions" class="sessions timeline-list"></div>
           </section>
 
           <section class="metrics-grid" aria-label="Resource overview">
@@ -176,43 +201,11 @@
             </div>
           </section>
 
-          <section id="sessionsPanel" class="panel timeline-panel">
-            <div class="section-header">
-              <div>
-                <p class="eyebrow">Session Timeline</p>
-                <h2>Active Sessions</h2>
-              </div>
-              <button id="clearFailedBtn" class="ghost-button">Clear</button>
-            </div>
-            <div id="sessions" class="sessions timeline-list"></div>
-          </section>
-
-          <section id="controlsPanel" class="panel actions-panel">
-            <div class="section-header">
-              <div>
-                <p class="eyebrow">Telegram Actions</p>
-                <h2>Remote Control</h2>
-              </div>
-            </div>
-            <div class="telegram-actions">
-              <button id="telegramStatusBtn" type="button"><span class="icon-slot" data-icon="status"></span><span>Send Status</span></button>
-              <button id="telegramLogsBtn" type="button"><span class="icon-slot" data-icon="logs"></span><span>Review Logs</span></button>
-              <button id="approveAllBtn" type="button"><span class="icon-slot" data-icon="approve"></span><span>Approve All</span></button>
-              <a class="button-link" href="https://web.telegram.org/" target="_blank" rel="noreferrer"><span class="icon-slot" data-icon="chat"></span><span>Open Chat</span></a>
-            </div>
-            <div class="control-buttons">
-              <button id="startAllUiBtn" type="button" class="control-start"><span class="icon-slot" data-icon="play"></span><span>Start</span></button>
-              <button id="stopAllUiBtn" type="button" class="control-stop"><span class="icon-slot" data-icon="stop"></span><span>Stop All</span></button>
-              <button id="restartUiBtn" type="button" class="control-restart"><span class="icon-slot" data-icon="refresh"></span><span>Restart</span></button>
-              <button id="sleepUiBtn" type="button" class="control-sleep"><span class="icon-slot" data-icon="sleep"></span><span>Sleep</span></button>
-            </div>
-          </section>
-
           <section class="panel profile-launcher-panel">
             <div class="section-header">
               <div>
                 <p class="eyebrow">Profile Launcher</p>
-                <h2>Quick Start</h2>
+                <h2>Default Agent</h2>
               </div>
               <button id="profileFormToggle" class="ghost-button" type="button">Edit</button>
             </div>
@@ -229,21 +222,69 @@
             </div>
             <pre id="logs" class="logs"></pre>
           </section>
+        </section>
 
-          <section id="commandPanel" class="panel command-panel">
-            <div class="section-header">
+        <section id="agentChatPanel" class="panel agent-chat-panel tab-panel">
+          <div class="chat-top">
+            <div class="chat-agent">
+              <span id="chatAgentIcon" class="service-icon" data-icon="chat" aria-hidden="true"></span>
               <div>
-                <p class="eyebrow">Command Deck</p>
-                <h2>Send Prompt</h2>
+                <p class="eyebrow">Agent Chat</p>
+                <h2 id="chatAgentName">No agent selected</h2>
+                <div class="chat-meta">
+                  <span id="chatProfileChip" class="mini-badge">Choose a service</span>
+                  <span id="chatStatusChip" class="badge">Idle</span>
+                </div>
               </div>
-              <select id="sessionSelect" title="Selected session"></select>
             </div>
-            <textarea id="promptInput" rows="3" placeholder="Describe the next task for the selected agent"></textarea>
-            <div class="row command-actions">
-              <button id="sendBtn" class="primary-action"><span class="icon-slot" data-icon="send"></span><span>Send</span></button>
-              <button id="openWindowBtn"><span class="icon-slot" data-icon="window"></span><span>Open Window</span></button>
+            <div class="chat-specs" aria-label="PC specs">
+              <span><strong id="chatGpu">--</strong><small>GPU</small></span>
+              <span><strong id="chatRam">--</strong><small>RAM</small></span>
+              <span><strong id="chatCpu">--</strong><small>CPU</small></span>
             </div>
-          </section>
+          </div>
+
+          <div class="chat-actions">
+            <button id="chatSwitchProfileBtn" type="button"><span class="icon-slot" data-icon="profiles"></span><span>Switch</span></button>
+            <button id="chatTerminalBtn" type="button"><span class="icon-slot" data-icon="terminal"></span><span>Terminal</span></button>
+            <button id="chatLogsBtn" type="button"><span class="icon-slot" data-icon="logs"></span><span>Logs</span></button>
+            <button id="chatStopBtn" type="button" class="danger-action"><span class="icon-slot" data-icon="stop"></span><span>Stop</span></button>
+          </div>
+
+          <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
+
+          <div class="chat-composer">
+            <textarea id="chatPromptInput" rows="2" placeholder="Send a prompt to the selected agent..."></textarea>
+            <div class="chat-send-row">
+              <button id="chatAttachBtn" type="button" class="ghost-button"><span class="icon-slot" data-icon="plus"></span></button>
+              <button id="chatSendBtn" type="button" class="primary-action"><span class="icon-slot" data-icon="send"></span><span>Send</span></button>
+            </div>
+          </div>
+        </section>
+
+        <section id="commandPanel" class="panel command-panel tab-panel">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Command Deck</p>
+              <h2>Send Prompt</h2>
+            </div>
+            <select id="sessionSelect" title="Selected session"></select>
+          </div>
+          <textarea id="promptInput" rows="3" placeholder="Describe the next task for the selected agent"></textarea>
+          <div class="row command-actions">
+            <button id="sendBtn" class="primary-action"><span class="icon-slot" data-icon="send"></span><span>Send</span></button>
+            <button id="openWindowBtn"><span class="icon-slot" data-icon="window"></span><span>Open Window</span></button>
+          </div>
+        </section>
+
+        <section id="controlsPanel" class="panel actions-panel tab-panel" hidden>
+          <button id="telegramStatusBtn" type="button">Send Status</button>
+          <button id="telegramLogsBtn" type="button">Review Logs</button>
+          <button id="approveAllBtn" type="button">Approve All</button>
+          <button id="startAllUiBtn" type="button">Start</button>
+          <button id="stopAllUiBtn" type="button">Stop All</button>
+          <button id="restartUiBtn" type="button">Restart</button>
+          <button id="sleepUiBtn" type="button">Sleep</button>
         </section>
 
         <section id="profilesPanel" class="panel profiles-panel tab-panel">
@@ -259,7 +300,7 @@
               <label class="field">
                 <span>Name</span>
                 <input id="profileName" placeholder="Claude - Main repo" autocomplete="off" />
-                <small>Friendly name shown in dashboard and Telegram.</small>
+                <small>Friendly name shown in dashboard and chat.</small>
               </label>
               <label class="field">
                 <span>Agent</span>
@@ -309,7 +350,7 @@
       <nav class="mobile-nav" aria-label="Mobile navigation">
         <button type="button" data-view="home" class="active"><span class="icon-slot" data-icon="home"></span><span>Home</span></button>
         <button type="button" data-view="sessions"><span class="icon-slot" data-icon="sessions"></span><span>Sessions</span></button>
-        <button type="button" data-view="controls"><span class="icon-slot" data-icon="controls"></span><span>Controls</span></button>
+        <button type="button" data-view="chat"><span class="icon-slot" data-icon="chat"></span><span>Chat</span></button>
         <button type="button" data-view="logs"><span class="icon-slot" data-icon="logs"></span><span>Logs</span></button>
         <button type="button" data-view="profiles"><span class="icon-slot" data-icon="profiles"></span><span>More</span></button>
       </nav>

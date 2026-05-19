@@ -28,7 +28,7 @@ let serverHandle: WorkstationServerHandle | undefined;
 const sessionWindows = new Map<string, BrowserWindow>();
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
-app.setName("Remote AI Workstation");
+app.setName("KAEL OS");
 
 function appPath(...segments: string[]): string {
   if (app.isPackaged) {
@@ -179,7 +179,7 @@ async function startBackend(): Promise<WorkstationServerHandle> {
   process.env.WORKSTATION_DATA_DIR = app.getPath("userData");
   process.env.WORKSTATION_FRONTEND_DIR = appPath("frontend");
   process.env.WORKSTATION_NODE_MODULES_DIR = appPath("node_modules");
-  process.env.WORKSTATION_DEFAULT_CWD = path.join(app.getPath("documents"), "Remote AI Workstation");
+  process.env.WORKSTATION_DEFAULT_CWD = path.join(app.getPath("documents"), "KAEL OS");
 
   const serverModuleUrl = app.isPackaged
     ? pathToFileURL(path.join(app.getAppPath(), "dist", "backend", "src", "server.js")).href
@@ -259,7 +259,7 @@ function createWindow(): void {
     height: 820,
     minWidth: 720,
     minHeight: 620,
-    title: "Remote AI Workstation",
+    title: "KAEL OS",
     backgroundColor: "#0b0f14",
     autoHideMenuBar: true,
     webPreferences: {

@@ -1,9 +1,9 @@
 {
-  "name": "Remote AI Workstation",
-  "short_name": "AI Workstation",
+  "name": "KAEL OS",
+  "short_name": "KAEL OS",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#080a0d",
-  "theme_color": "#121820",
+  "background_color": "#061116",
+  "theme_color": "#071b22",
   "icons": []
 }

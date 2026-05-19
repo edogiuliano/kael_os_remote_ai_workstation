@@ -1,6 +1,6 @@
-# Remote AI Workstation
+# KAEL OS
 
-Remote AI Workstation is a Windows 11 control center for running local AI coding agents from a desktop app, a mobile PWA, or Telegram.
+KAEL OS is a Windows 11 control center for running local AI coding agents from a desktop app, a mobile PWA, or Telegram.
 
 It is designed for a home or office PC that stays powered on, runs local tools such as Codex CLI and Claude Code, and exposes a private dashboard through Tailscale instead of the public internet.
 

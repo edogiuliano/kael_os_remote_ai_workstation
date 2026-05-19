@@ -1,6 +1,6 @@
 # Architecture
 
-Remote AI Workstation is a single-machine control plane for local AI coding agents. It runs on a Windows 11 host and exposes three control surfaces: Electron desktop, browser/PWA dashboard, and Telegram bot.
+KAEL OS is a single-machine control plane for local AI coding agents. It runs on a Windows 11 host and exposes three control surfaces: Electron desktop, browser/PWA dashboard, and Telegram bot.
 
 ## Runtime Shape
 

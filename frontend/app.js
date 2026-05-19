@@ -3,6 +3,8 @@ const state = {
   sessions: [],
   profiles: [],
   selectedSessionId: "",
+  activeChatSessionId: "",
+  activeAgentKind: "",
   activeView: "home",
   loadingProfileId: "",
   loadingSessionKind: "",
@@ -11,7 +13,9 @@ const state = {
   activeLogSessionId: "",
   desktop: Boolean(window.workstation),
   launching: false,
-  sparks: { cpu: [], ram: [], gpu: [], disk: [] }
+  sparks: { cpu: [], ram: [], gpu: [], disk: [] },
+  latestSystem: null,
+  chatBySession: {}
 };
 
 const el = {
@@ -67,6 +71,22 @@ const el = {
   sessionSelect: document.getElementById("sessionSelect"),
   sendBtn: document.getElementById("sendBtn"),
   openWindowBtn: document.getElementById("openWindowBtn"),
+  agentChatPanel: document.getElementById("agentChatPanel"),
+  chatAgentIcon: document.getElementById("chatAgentIcon"),
+  chatAgentName: document.getElementById("chatAgentName"),
+  chatProfileChip: document.getElementById("chatProfileChip"),
+  chatStatusChip: document.getElementById("chatStatusChip"),
+  chatGpu: document.getElementById("chatGpu"),
+  chatRam: document.getElementById("chatRam"),
+  chatCpu: document.getElementById("chatCpu"),
+  chatMessages: document.getElementById("chatMessages"),
+  chatPromptInput: document.getElementById("chatPromptInput"),
+  chatSendBtn: document.getElementById("chatSendBtn"),
+  chatAttachBtn: document.getElementById("chatAttachBtn"),
+  chatSwitchProfileBtn: document.getElementById("chatSwitchProfileBtn"),
+  chatTerminalBtn: document.getElementById("chatTerminalBtn"),
+  chatLogsBtn: document.getElementById("chatLogsBtn"),
+  chatStopBtn: document.getElementById("chatStopBtn"),
   refreshBtn: document.getElementById("refreshBtn"),
   clearLogsBtn: document.getElementById("clearLogsBtn"),
   clearFailedBtn: document.getElementById("clearFailedBtn"),
@@ -193,7 +213,7 @@ function setConnected(connected) {
 }
 
 function setActiveView(view) {
-  const allowed = new Set(["home", "sessions", "controls", "logs", "profiles", "access"]);
+  const allowed = new Set(["home", "sessions", "chat", "logs", "profiles", "access"]);
   state.activeView = allowed.has(view) ? view : "home";
   if (el.appMain) el.appMain.dataset.view = state.activeView;
   document.querySelectorAll(".rail-link[data-view], .mobile-nav button[data-view]").forEach((item) => {
@@ -203,6 +223,7 @@ function setActiveView(view) {
     }
   });
   if (state.activeView === "profiles") document.getElementById("profilesPanel")?.classList.add("expanded");
+  if (state.activeView === "chat") renderChat();
 }
 
 function hydrateStaticIcons(root = document) {
@@ -273,6 +294,7 @@ function setBusy(button, busy, label) {
 }
 
 function renderStatus(status) {
+  state.latestSystem = status.system;
   state.sessions = status.sessions || [];
   const cpu = Number(status.system.cpuLoad || 0);
   const ram = Number(status.system.memoryUsedPct || 0);
@@ -290,6 +312,7 @@ function renderStatus(status) {
   el.ramDetail.textContent = `${status.system.memoryUsedGb || "--"} / ${status.system.memoryTotalGb || "--"} GB`;
   el.gpuDetail.textContent = status.system.gpu?.temperatureC ? `${status.system.gpu.temperatureC}C` : status.system.gpu?.model || "GPU status";
   el.gpuBadge.textContent = status.system.gpu?.model ? status.system.gpu.model.replace(/\s+/g, " ").slice(0, 18) : "GPU --";
+  updateChatSpecs(cpu, ram, gpu);
   drawSpark(el.cpuSpark, state.sparks.cpu, "#60a5fa");
   drawSpark(el.ramSpark, state.sparks.ram, "#58a6ff");
   drawSpark(el.gpuSpark, state.sparks.gpu, "#f08a4b");
@@ -298,7 +321,14 @@ function renderStatus(status) {
   setLink(el.tailscaleUrl, status.access.tailscaleUrl);
   el.tailscaleState.textContent = status.access.tailscaleUrl ? "Detected" : "Missing";
   renderSessions();
+  renderChatHeader();
   renderServices(status.services || []);
+}
+
+function updateChatSpecs(cpu, ram, gpu) {
+  if (el.chatCpu) el.chatCpu.textContent = `${Math.round(cpu)}%`;
+  if (el.chatRam) el.chatRam.textContent = `${Math.round(ram)}%`;
+  if (el.chatGpu) el.chatGpu.textContent = Number.isFinite(gpu) && gpu > 0 ? `${Math.round(gpu)}%` : "GPU";
 }
 
 function setLink(anchor, value) {
@@ -321,6 +351,7 @@ function renderSessions() {
   if (state.sessions.length === 0) {
     el.sessions.innerHTML = `<div class="empty-state">No active sessions yet. Start Claude, Codex, or one of your saved profiles.</div>`;
     el.sessionSelect.innerHTML = `<option value="">No active session</option>`;
+    renderChatHeader();
     return;
   }
 
@@ -341,8 +372,8 @@ function renderSessions() {
         <span class="status ${session.status}">${session.status}</span>
       </div>
       <div class="session-actions">
-        <button data-action="select" data-id="${session.id}">Select</button>
-        <button data-action="open" data-id="${session.id}">Open</button>
+        <button data-action="chat" data-id="${session.id}">Chat</button>
+        <button data-action="open" data-id="${session.id}">Term</button>
         <button data-action="logs" data-id="${session.id}">Logs</button>
         <button data-action="stop" data-id="${session.id}">Stop</button>
       </div>
@@ -352,6 +383,8 @@ function renderSessions() {
 
   if (state.selectedSessionId) el.sessionSelect.value = state.selectedSessionId;
   if (!state.selectedSessionId && state.sessions[0]) state.selectedSessionId = state.sessions[0].id;
+  if (!state.activeChatSessionId && state.selectedSessionId) state.activeChatSessionId = state.selectedSessionId;
+  renderChatHeader();
 }
 
 function renderProfiles() {
@@ -387,7 +420,7 @@ function renderProfiles() {
 
 function renderProfileLauncher() {
   if (!el.profileLauncher) return;
-  const primary = state.profiles[0];
+  const primary = state.profiles.find((profile) => profile.kind === "claude") || state.profiles.find((profile) => profile.kind === "codex") || state.profiles[0];
   if (!primary) {
     el.profileLauncher.innerHTML = `
       <div class="empty-state">Create a profile to pin your main repo here.</div>
@@ -407,6 +440,153 @@ function renderProfileLauncher() {
       <button data-action="start-profile" data-id="${primary.id}" class="primary-action">${active ? "Focus" : "Launch"}</button>
     </div>
   `;
+}
+
+function defaultProfileForKind(kind) {
+  return state.profiles.find((profile) => profile.kind === kind);
+}
+
+function activeSessionForKind(kind) {
+  return state.sessions.find((session) => session.kind === kind && ["starting", "running"].includes(session.status));
+}
+
+async function openAgent(kind) {
+  const active = activeSessionForKind(kind);
+  if (active) {
+    enterChat(active.id);
+    showToast(`${active.name} connected.`);
+    return;
+  }
+
+  const profile = defaultProfileForKind(kind);
+  if (profile) {
+    await startProfile(profile.id, { openChat: true, openWindow: false });
+    return;
+  }
+
+  await startSession(kind, { openChat: true, openWindow: false });
+}
+
+function enterChat(sessionId) {
+  const session = state.sessions.find((item) => item.id === sessionId);
+  state.activeChatSessionId = sessionId;
+  state.selectedSessionId = sessionId;
+  state.activeAgentKind = session?.kind || state.activeAgentKind || "";
+  if (el.sessionSelect) el.sessionSelect.value = sessionId;
+  if (session && ensureChat(sessionId).length === 0) {
+    appendChatMessage(sessionId, "system", `Connected to ${session.name}. Send prompts here; raw terminal output stays in Logs.`);
+  }
+  setActiveView("chat");
+  renderChatHeader();
+  renderChat();
+}
+
+function renderChatHeader() {
+  const session = state.sessions.find((item) => item.id === state.activeChatSessionId) || state.sessions.find((item) => item.id === state.selectedSessionId);
+  if (!session) {
+    if (el.chatAgentIcon) el.chatAgentIcon.innerHTML = iconSvg("chat");
+    if (el.chatAgentName) el.chatAgentName.textContent = "No agent selected";
+    if (el.chatProfileChip) el.chatProfileChip.textContent = "Choose Claude or Codex";
+    if (el.chatStatusChip) {
+      el.chatStatusChip.textContent = "Idle";
+      el.chatStatusChip.className = "badge";
+    }
+    return;
+  }
+
+  state.activeChatSessionId = session.id;
+  if (el.chatAgentIcon) el.chatAgentIcon.innerHTML = iconSvg(iconForKind(session.kind));
+  if (el.chatAgentName) el.chatAgentName.textContent = session.name;
+  if (el.chatProfileChip) el.chatProfileChip.textContent = session.profileName || compactPath(session.cwd) || session.kind;
+  if (el.chatStatusChip) {
+    el.chatStatusChip.textContent = session.status;
+    el.chatStatusChip.className = `badge ${session.status === "running" || session.status === "starting" ? "online" : session.status === "error" ? "offline" : ""}`;
+  }
+}
+
+function ensureChat(sessionId) {
+  if (!state.chatBySession[sessionId]) state.chatBySession[sessionId] = [];
+  return state.chatBySession[sessionId];
+}
+
+function appendChatMessage(sessionId, role, text) {
+  if (!sessionId || !text) return;
+  const messages = ensureChat(sessionId);
+  messages.push({ role, text, at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
+  if (messages.length > 80) messages.splice(0, messages.length - 80);
+  if (sessionId === state.activeChatSessionId) renderChat();
+}
+
+function appendAgentOutput(sessionId, chunk) {
+  if (!sessionId || !chunk) return;
+  const text = cleanChatOutput(chunk);
+  if (!text) return;
+  const messages = ensureChat(sessionId);
+  const last = messages[messages.length - 1];
+  if (last?.role === "agent" && last.streaming) {
+    last.text = compactChatText(`${last.text}${text}`);
+    last.at = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } else {
+    messages.push({ role: "agent", text: compactChatText(text), streaming: true, at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
+  }
+  if (messages.length > 80) messages.splice(0, messages.length - 80);
+  if (sessionId === state.activeChatSessionId) renderChat();
+}
+
+function renderChat() {
+  if (!el.chatMessages) return;
+  const sessionId = state.activeChatSessionId;
+  if (!sessionId) {
+    el.chatMessages.innerHTML = `
+      <div class="chat-empty">
+        <strong>Select an agent app to start.</strong>
+        <span>Tap Claude or Codex from Mission Control and your prompt console will open here.</span>
+      </div>
+    `;
+    return;
+  }
+
+  const messages = ensureChat(sessionId);
+  if (messages.length === 0) {
+    el.chatMessages.innerHTML = `
+      <div class="chat-empty">
+        <strong>Ready for prompts.</strong>
+        <span>This chat is connected to ${escapeHtml(shortId(sessionId))}. Ask the agent what to do next.</span>
+      </div>
+    `;
+    return;
+  }
+
+  const atBottom = el.chatMessages.scrollTop + el.chatMessages.clientHeight >= el.chatMessages.scrollHeight - 28;
+  el.chatMessages.innerHTML = messages
+    .map((message) => {
+      const role = escapeHtml(message.role);
+      return `
+        <article class="chat-bubble ${role}">
+          <div class="bubble-text">${formatChatText(message.text)}</div>
+          <time>${escapeHtml(message.at || "")}</time>
+        </article>
+      `;
+    })
+    .join("");
+  if (atBottom) el.chatMessages.scrollTop = el.chatMessages.scrollHeight;
+}
+
+function formatChatText(text) {
+  return escapeHtml(text).replace(/\n{3,}/g, "\n\n").replace(/\n/g, "<br>");
+}
+
+function iconForKind(kind) {
+  if (kind === "claude") return "claude";
+  if (kind === "codex") return "codex";
+  if (kind === "powershell") return "terminal";
+  return "chat";
+}
+
+function compactPath(value) {
+  if (!value) return "";
+  const parts = String(value).split(/[\\/]/).filter(Boolean);
+  return parts.slice(-2).join(" / ");
 }
 
 function renderServices(services) {
@@ -456,7 +636,7 @@ function drawSpark(canvas, values, color) {
   ctx.stroke();
 }
 
-async function startSession(kind) {
+async function startSession(kind, options = {}) {
   if (state.launching) return;
   state.launching = true;
   state.loadingSessionKind = kind;
@@ -469,10 +649,15 @@ async function startSession(kind) {
       body: JSON.stringify({ kind, prompt: prompt || undefined, reuseExisting: true })
     });
     state.selectedSessionId = result.session.id;
-    showToast(`${result.session.name} is ready. Terminal window opening.`);
+    if (options.openChat) state.activeChatSessionId = result.session.id;
+    showToast(`${result.session.name} is ready.`);
     appendLog(`[system] ${result.session.name} ready: ${result.session.id}\n`);
-    await api(`/api/sessions/${result.session.id}/open-window`, { method: "POST" }).catch((error) => appendLog(`[warn] ${cleanError(error)}\n`));
+    appendChatMessage(result.session.id, "system", `${result.session.name} started. Send a prompt when you are ready.`);
+    if (options.openWindow !== false) {
+      await api(`/api/sessions/${result.session.id}/open-window`, { method: "POST" }).catch((error) => appendLog(`[warn] ${cleanError(error)}\n`));
+    }
     await refreshAll();
+    if (options.openChat) enterChat(result.session.id);
   } finally {
     state.launching = false;
     state.loadingSessionKind = "";
@@ -506,27 +691,62 @@ async function sendInput() {
   }
 }
 
+async function sendChatInput() {
+  const id = state.activeChatSessionId || el.sessionSelect.value || state.selectedSessionId;
+  const text = el.chatPromptInput.value.trim();
+  if (!id || !text) {
+    showToast(id ? "Write a prompt first." : "Choose an agent session first.", "error");
+    return;
+  }
+  state.sendingPrompt = true;
+  setBusy(el.chatSendBtn, true, "Sending...");
+  try {
+    appendChatMessage(id, "user", text);
+    await api(`/api/sessions/${id}/input`, {
+      method: "POST",
+      body: JSON.stringify({ text })
+    });
+    el.chatPromptInput.value = "";
+    appendChatMessage(id, "system", "Prompt sent. Waiting for the agent...");
+  } catch (error) {
+    appendChatMessage(id, "system", cleanError(error));
+    throw error;
+  } finally {
+    state.sendingPrompt = false;
+    setBusy(el.chatSendBtn, false);
+  }
+}
+
 async function openWindow(id = el.sessionSelect.value || state.selectedSessionId) {
   if (!id) return;
   await api(`/api/sessions/${id}/open-window`, { method: "POST" });
 }
 
-function startProfile(id) {
+function startProfile(id, options = {}) {
   if (!id) return;
   const active = activeSessionForProfile(id);
   if (active) {
     state.selectedSessionId = active.id;
-    openWindow(active.id).catch((error) => showToast(cleanError(error), "error"));
-    showToast(`Focused ${active.name}.`);
+    if (options.openChat) {
+      enterChat(active.id);
+    } else {
+      openWindow(active.id).catch((error) => showToast(cleanError(error), "error"));
+      showToast(`Focused ${active.name}.`);
+    }
     return;
   }
   state.loadingProfileId = id;
   renderProfiles();
-  api("/api/sessions/start-profile", { method: "POST", body: JSON.stringify({ profileId: id, openWindow: true }) })
+  api("/api/sessions/start-profile", { method: "POST", body: JSON.stringify({ profileId: id, openWindow: options.openWindow !== false }) })
     .then((result) => {
       state.selectedSessionId = result.session.id;
+      if (options.openChat) state.activeChatSessionId = result.session.id;
+      appendChatMessage(result.session.id, "system", `${result.session.name} started from profile. Send your next prompt here.`);
       showToast(`${result.session.name} started.`);
       return refreshAll();
+    })
+    .then(() => {
+      if (options.openChat) enterChat(state.selectedSessionId);
     })
     .catch((error) => {
       showToast(cleanError(error), "error");
@@ -597,8 +817,18 @@ function connectWebSocket() {
   });
   ws.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
-    if (message.type === "session.output") appendLog(`[${message.sessionId.slice(0, 8)}] ${message.chunk}`);
-    if (message.type === "session.status") refreshAll().catch(console.error);
+    if (message.type === "session.output") {
+      appendLog(`[${message.sessionId.slice(0, 8)}] ${message.chunk}`);
+      appendAgentOutput(message.sessionId, message.chunk);
+    }
+    if (message.type === "session.status") {
+      if (message.session?.id && message.session.status !== "running" && message.session.status !== "starting") {
+        const messages = ensureChat(message.session.id);
+        const last = messages[messages.length - 1];
+        if (last?.role === "agent") last.streaming = false;
+      }
+      refreshAll().catch(console.error);
+    }
     if (message.type === "status") renderStatus(message.status);
   });
 }
@@ -631,6 +861,28 @@ function cleanTerminalText(value) {
     .replace(/\x07/g, "")
     .replace(/\r(?!\n)/g, "\n")
     .replace(/[ \t]+\n/g, "\n");
+}
+
+function cleanChatOutput(value) {
+  const cleaned = cleanTerminalText(value)
+    .replace(/\[[0-9a-f]{8}\]/gi, "")
+    .replace(/\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*\[(stdout|stderr|system)\]\s*/gi, "")
+    .replace(/[│╭╮╰╯─]{4,}/g, "")
+    .replace(/[✢✶✻✽·*]{2,}/g, "")
+    .replace(/\b(thinking|still thinking|esc to interrupt)\b/gi, "")
+    .replace(/\? for shortcuts/gi, "")
+    .replace(/Update available!.*$/gim, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (!cleaned || cleaned.length < 2) return "";
+  if (/^[\W_]+$/.test(cleaned)) return "";
+  return cleaned.endsWith("\n") ? cleaned : `${cleaned}\n`;
+}
+
+function compactChatText(value) {
+  const text = String(value).replace(/\n{4,}/g, "\n\n\n");
+  return text.length > 6000 ? text.slice(-6000) : text;
 }
 
 function shortId(id) {
@@ -710,7 +962,7 @@ el.desktopResetBtn.addEventListener("click", async () => {
 
 document.querySelectorAll("[data-kind]").forEach((button) => {
   button.addEventListener("click", () =>
-    startSession(button.dataset.kind).catch((error) => {
+    openAgent(button.dataset.kind).catch((error) => {
       showToast(cleanError(error), "error");
       appendLog(`[error] ${cleanError(error)}\n`);
     })
@@ -733,12 +985,11 @@ el.sessions.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
   const id = button.dataset.id;
-  if (button.dataset.action === "select") {
-    state.selectedSessionId = id;
-    el.sessionSelect.value = id;
-  }
+  if (button.dataset.action === "chat") enterChat(id);
   if (button.dataset.action === "open") openWindow(id).catch((error) => appendLog(`[error] ${cleanError(error)}\n`));
-  if (button.dataset.action === "logs") loadLogs(id).catch((error) => appendLog(`[error] ${cleanError(error)}\n`));
+  if (button.dataset.action === "logs") {
+    loadLogs(id).then(() => setActiveView("logs")).catch((error) => appendLog(`[error] ${cleanError(error)}\n`));
+  }
   if (button.dataset.action === "stop") {
     api(`/api/sessions/${id}/stop`, { method: "POST" }).then(refreshAll).catch((error) => appendLog(`[error] ${cleanError(error)}\n`));
   }
@@ -773,7 +1024,7 @@ el.profiles.addEventListener("click", (event) => {
 el.profileLauncher?.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
-  if (button.dataset.action === "start-profile") startProfile(button.dataset.id);
+  if (button.dataset.action === "start-profile") startProfile(button.dataset.id, { openChat: true, openWindow: false });
 });
 
 el.saveTokenBtn.addEventListener("click", () => {
@@ -783,6 +1034,24 @@ el.saveTokenBtn.addEventListener("click", () => {
 });
 el.sendBtn.addEventListener("click", () => sendInput().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
 el.openWindowBtn.addEventListener("click", () => openWindow().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
+el.chatSendBtn.addEventListener("click", () => sendChatInput().catch((error) => showToast(cleanError(error), "error")));
+el.chatPromptInput.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    sendChatInput().catch((error) => showToast(cleanError(error), "error"));
+  }
+});
+el.chatTerminalBtn.addEventListener("click", () => openWindow(state.activeChatSessionId).catch((error) => showToast(cleanError(error), "error")));
+el.chatLogsBtn.addEventListener("click", () => {
+  if (!state.activeChatSessionId) return showToast("Choose an agent first.", "error");
+  loadLogs(state.activeChatSessionId).then(() => setActiveView("logs")).catch((error) => showToast(cleanError(error), "error"));
+});
+el.chatStopBtn.addEventListener("click", () => {
+  if (!state.activeChatSessionId) return showToast("Choose an agent first.", "error");
+  api(`/api/sessions/${state.activeChatSessionId}/stop`, { method: "POST" }).then(refreshAll).catch((error) => showToast(cleanError(error), "error"));
+});
+el.chatSwitchProfileBtn.addEventListener("click", () => setActiveView("profiles"));
+el.chatAttachBtn.addEventListener("click", () => showToast("File attachments are planned for the next mobile pass."));
 el.refreshBtn.addEventListener("click", () => refreshAll().catch((error) => {
   showToast(cleanError(error), "error");
   appendLog(`[error] ${cleanError(error)}\n`);

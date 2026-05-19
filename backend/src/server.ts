@@ -50,7 +50,7 @@ export async function startWorkstationServer(): Promise<WorkstationServerHandle>
     server.once("error", reject);
     server.listen(config.port, config.host, () => {
       server.off("error", reject);
-      logger.info({ host: config.host, port: config.port }, "Remote AI Workstation listening");
+      logger.info({ host: config.host, port: config.port }, "KAEL OS listening");
       resolve();
     });
   });

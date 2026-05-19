@@ -276,7 +276,7 @@ export async function buildStatus(sessionManager: SessionManager): Promise<Works
   const localUrl = `http://127.0.0.1:${config.port}`;
   return {
     app: {
-      name: "Remote AI Workstation",
+      name: "KAEL OS",
       version: "0.1.0",
       nodeEnv: config.nodeEnv,
       uptimeSec: Math.round(process.uptime())

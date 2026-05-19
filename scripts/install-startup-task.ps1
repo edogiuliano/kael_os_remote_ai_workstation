@@ -1,5 +1,5 @@
 param(
-  [string]$TaskName = "Remote AI Workstation"
+  [string]$TaskName = "KAEL OS"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +14,5 @@ $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-Executio
 $Trigger = New-ScheduledTaskTrigger -AtLogOn
 $Settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Description "Starts the Remote AI Workstation at login." -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Description "Starts KAEL OS at login." -Force | Out-Null
 Write-Host "Installed startup task: $TaskName"
-

@@ -1,8 +1,8 @@
 {
-  "name": "remote-ai-workstation",
+  "name": "kael-os",
   "version": "0.1.0",
   "private": true,
-  "description": "Windows 11 remote AI workstation for controlling local coding agents from Android.",
+  "description": "KAEL OS: a Windows 11 remote AI workstation for controlling local coding agents from Android.",
   "type": "module",
   "main": "dist/desktop/main.js",
   "scripts": {
@@ -48,7 +48,7 @@
   },
   "build": {
     "appId": "com.remoteai.workstation",
-    "productName": "Remote AI Workstation",
+    "productName": "KAEL OS",
     "directories": {
       "output": "release"
     },

@@ -55,7 +55,7 @@ export class TelegramBotController {
 
     this.bot.start(async (ctx) => {
       this.stateFor(ctx.chat.id);
-      await ctx.reply("Remote AI Workstation ready. Use /sessions or /profiles to connect.", this.mainKeyboard());
+      await ctx.reply("KAEL OS ready. Use /sessions or /profiles to connect.", this.mainKeyboard());
     });
 
     this.bot.command("status", async (ctx) => ctx.reply(this.formatSessions(), this.mainKeyboard()));
