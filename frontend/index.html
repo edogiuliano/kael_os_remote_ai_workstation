@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0c1117" />
+    <title>Remote AI Workstation</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="setupOverlay" class="setup-overlay" hidden>
+      <form id="setupForm" class="setup-card">
+        <p class="eyebrow">First Run Setup</p>
+        <h1>Connect Telegram</h1>
+        <p class="setup-copy">Your bot token stays on this PC. The private API token is generated automatically.</p>
+
+        <label for="setupBotToken">Telegram bot token</label>
+        <input id="setupBotToken" type="password" placeholder="123456789:AA..." autocomplete="off" required />
+
+        <label for="setupChatId">Telegram chat id</label>
+        <input id="setupChatId" type="text" placeholder="123456789" autocomplete="off" required />
+
+        <label for="setupPort">Local port</label>
+        <input id="setupPort" type="number" min="1024" max="65535" value="8787" required />
+
+        <label for="setupTailscalePath">Tailscale path</label>
+        <div class="row compact">
+          <input id="setupTailscalePath" type="text" placeholder="Auto-detected, or choose tailscale.exe" autocomplete="off" />
+          <button id="detectTailscaleBtn" type="button">Auto</button>
+          <button id="chooseTailscaleBtn" type="button">Browse</button>
+        </div>
+
+        <button id="setupSaveBtn" type="submit">Create Config And Start</button>
+        <p id="setupStatus" class="setup-status"></p>
+        <p id="setupPath" class="setup-path"></p>
+      </form>
+    </section>
+
+    <section id="desktopErrorOverlay" class="setup-overlay" hidden>
+      <div class="setup-card">
+        <p class="eyebrow">Desktop Startup</p>
+        <h1>Workstation could not start</h1>
+        <p id="desktopErrorMessage" class="setup-copy"></p>
+        <p id="desktopErrorLog" class="setup-path"></p>
+        <div class="row two-actions">
+          <button id="desktopRetryBtn" type="button">Retry</button>
+          <button id="desktopResetBtn" type="button">Reconfigure</button>
+        </div>
+      </div>
+    </section>
+
+    <main class="app-frame">
+      <aside class="app-rail" aria-label="Primary navigation">
+        <div class="rail-mark" aria-label="Remote AI Workstation">C</div>
+        <nav class="rail-nav">
+          <button class="rail-link active" type="button" data-view="home" data-tip="Home - overview, metrics and quick launch" aria-label="Home">
+            <span class="icon-slot" data-icon="home"></span>
+          </button>
+          <button class="rail-link" type="button" data-view="sessions" data-tip="Sessions - inspect and manage active agents" aria-label="Sessions">
+            <span class="icon-slot" data-icon="sessions"></span>
+          </button>
+          <button class="rail-link" type="button" data-view="controls" data-tip="Controls - send prompts and remote commands" aria-label="Controls">
+            <span class="icon-slot" data-icon="controls"></span>
+          </button>
+          <button class="rail-link" type="button" data-view="logs" data-tip="Logs - read live output without stretching the app" aria-label="Logs">
+            <span class="icon-slot" data-icon="logs"></span>
+          </button>
+          <button class="rail-link" type="button" data-view="profiles" data-tip="Profiles - saved repos, commands and env values" aria-label="Profiles">
+            <span class="icon-slot" data-icon="profiles"></span>
+          </button>
+          <button class="rail-link" type="button" data-view="access" data-tip="Access - local and Tailscale URLs" aria-label="Access">
+            <span class="icon-slot" data-icon="access"></span>
+          </button>
+        </nav>
+      </aside>
+
+      <section class="app-main" data-view="home">
+        <header class="topbar">
+          <div class="brand-lockup">
+            <div class="brand-text">
+              <p class="eyebrow">Remote AI Workstation</p>
+              <h1>Mobile Mission Control</h1>
+            </div>
+            <div class="meta-row">
+              <span id="connectionBadge" class="badge">Connecting</span>
+              <span id="gpuBadge" class="mini-badge">GPU --</span>
+              <span id="pcBadge" class="mini-badge">Windows 11</span>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button id="refreshBtn" class="icon-button" title="Refresh" aria-label="Refresh">
+              <span class="icon-slot" data-icon="refresh" aria-hidden="true"></span>
+              <span class="button-label">Refresh</span>
+            </button>
+          </div>
+        </header>
+
+        <div id="toast" class="toast" hidden></div>
+
+        <section id="authPanel" class="panel auth-panel">
+          <label for="tokenInput">API token</label>
+          <div class="row">
+            <input id="tokenInput" type="password" placeholder="Paste API_TOKEN" autocomplete="off" />
+            <button id="saveTokenBtn">Save</button>
+          </div>
+        </section>
+
+        <section id="dashboard" class="dashboard-grid">
+          <section class="panel quick-panel">
+            <div class="section-header compact-header">
+              <div>
+                <p class="eyebrow">Quick Services</p>
+                <h2>Launch Center</h2>
+              </div>
+              <span id="launchStatus" class="soft-label">Ready</span>
+            </div>
+            <div class="quick-grid" aria-label="Quick services">
+              <button class="service-card service-comfy" data-service="comfyui">
+                <span class="service-icon" data-icon="comfy" aria-hidden="true"></span>
+                <strong>ComfyUI</strong>
+                <small id="comfyState">Checking</small>
+              </button>
+              <button class="service-card service-codex" data-kind="codex">
+                <span class="service-icon" data-icon="codex" aria-hidden="true"></span>
+                <strong>Codex</strong>
+                <small id="codexState">Ready</small>
+              </button>
+              <button class="service-card service-claude" data-kind="claude">
+                <span class="service-icon" data-icon="claude" aria-hidden="true"></span>
+                <strong>Claude</strong>
+                <small id="claudeState">Ready</small>
+              </button>
+              <button class="service-card service-ollama" data-service="ollama">
+                <span class="service-icon" data-icon="ollama" aria-hidden="true"></span>
+                <strong>Ollama</strong>
+                <small id="ollamaState">Checking</small>
+              </button>
+              <a class="service-card service-telegram link-card" id="telegramCard" href="https://web.telegram.org/" target="_blank" rel="noreferrer">
+                <span class="service-icon" data-icon="telegram" aria-hidden="true"></span>
+                <strong>Telegram</strong>
+                <small>Connected</small>
+              </a>
+              <button class="service-card service-tailscale" type="button" data-view-target="access">
+                <span class="service-icon" data-icon="tailscale" aria-hidden="true"></span>
+                <strong>Tailscale</strong>
+                <small id="tailscaleState">Private</small>
+              </button>
+            </div>
+          </section>
+
+          <section class="metrics-grid" aria-label="Resource overview">
+            <div class="metric-card metric-gpu">
+              <span>GPU</span>
+              <strong id="gpuMetric">--</strong>
+              <small id="gpuDetail">NVIDIA / Local</small>
+              <canvas id="gpuSpark" width="180" height="44"></canvas>
+            </div>
+            <div class="metric-card metric-ram">
+              <span>RAM</span>
+              <strong id="ramMetric">--</strong>
+              <small id="ramDetail">--</small>
+              <canvas id="ramSpark" width="180" height="44"></canvas>
+            </div>
+            <div class="metric-card metric-cpu">
+              <span>CPU</span>
+              <strong id="cpuMetric">--</strong>
+              <small id="cpuDetail">System load</small>
+              <canvas id="cpuSpark" width="180" height="44"></canvas>
+            </div>
+            <div class="metric-card metric-disk">
+              <span>Disk</span>
+              <strong id="diskMetric">Local</strong>
+              <small>Workspace ready</small>
+              <canvas id="diskSpark" width="180" height="44"></canvas>
+            </div>
+          </section>
+
+          <section id="sessionsPanel" class="panel timeline-panel">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Session Timeline</p>
+                <h2>Active Sessions</h2>
+              </div>
+              <button id="clearFailedBtn" class="ghost-button">Clear</button>
+            </div>
+            <div id="sessions" class="sessions timeline-list"></div>
+          </section>
+
+          <section id="controlsPanel" class="panel actions-panel">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Telegram Actions</p>
+                <h2>Remote Control</h2>
+              </div>
+            </div>
+            <div class="telegram-actions">
+              <button id="telegramStatusBtn" type="button"><span class="icon-slot" data-icon="status"></span><span>Send Status</span></button>
+              <button id="telegramLogsBtn" type="button"><span class="icon-slot" data-icon="logs"></span><span>Review Logs</span></button>
+              <button id="approveAllBtn" type="button"><span class="icon-slot" data-icon="approve"></span><span>Approve All</span></button>
+              <a class="button-link" href="https://web.telegram.org/" target="_blank" rel="noreferrer"><span class="icon-slot" data-icon="chat"></span><span>Open Chat</span></a>
+            </div>
+            <div class="control-buttons">
+              <button id="startAllUiBtn" type="button" class="control-start"><span class="icon-slot" data-icon="play"></span><span>Start</span></button>
+              <button id="stopAllUiBtn" type="button" class="control-stop"><span class="icon-slot" data-icon="stop"></span><span>Stop All</span></button>
+              <button id="restartUiBtn" type="button" class="control-restart"><span class="icon-slot" data-icon="refresh"></span><span>Restart</span></button>
+              <button id="sleepUiBtn" type="button" class="control-sleep"><span class="icon-slot" data-icon="sleep"></span><span>Sleep</span></button>
+            </div>
+          </section>
+
+          <section class="panel profile-launcher-panel">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Profile Launcher</p>
+                <h2>Quick Start</h2>
+              </div>
+              <button id="profileFormToggle" class="ghost-button" type="button">Edit</button>
+            </div>
+            <div id="profileLauncher" class="profile-launcher"></div>
+          </section>
+
+          <section id="logsPanel" class="panel logs-panel log-preview-panel">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Log Preview</p>
+                <h2>Latest Output <span id="logSessionLabel"></span></h2>
+              </div>
+              <button id="clearLogsBtn" class="ghost-button">Clear</button>
+            </div>
+            <pre id="logs" class="logs"></pre>
+          </section>
+
+          <section id="commandPanel" class="panel command-panel">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Command Deck</p>
+                <h2>Send Prompt</h2>
+              </div>
+              <select id="sessionSelect" title="Selected session"></select>
+            </div>
+            <textarea id="promptInput" rows="3" placeholder="Describe the next task for the selected agent"></textarea>
+            <div class="row command-actions">
+              <button id="sendBtn" class="primary-action"><span class="icon-slot" data-icon="send"></span><span>Send</span></button>
+              <button id="openWindowBtn"><span class="icon-slot" data-icon="window"></span><span>Open Window</span></button>
+            </div>
+          </section>
+        </section>
+
+        <section id="profilesPanel" class="panel profiles-panel tab-panel">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Agent Profiles</p>
+              <h2>Create / Edit Profile</h2>
+            </div>
+            <button id="createProfileBtn" class="primary-action"><span class="icon-slot" data-icon="plus"></span><span>Create</span></button>
+          </div>
+          <div id="profileFormWrap" class="profile-form-wrap">
+            <div class="profile-form">
+              <label class="field">
+                <span>Name</span>
+                <input id="profileName" placeholder="Claude - Main repo" autocomplete="off" />
+                <small>Friendly name shown in dashboard and Telegram.</small>
+              </label>
+              <label class="field">
+                <span>Agent</span>
+                <select id="profileKind">
+                  <option value="claude">Claude</option>
+                  <option value="codex">Codex</option>
+                  <option value="custom">Custom</option>
+                  <option value="powershell">PowerShell</option>
+                </select>
+                <small>Choose what opens when this profile starts.</small>
+              </label>
+              <label class="field full">
+                <span>Project folder</span>
+                <input id="profileCwd" placeholder="C:\Users\You\Desktop\my-project" autocomplete="off" />
+                <small>Use the repo folder, not the app install folder.</small>
+              </label>
+              <label class="field full">
+                <span>Command override</span>
+                <input id="profileCommand" placeholder="Optional, e.g. claude or codex" autocomplete="off" />
+                <small>Leave empty unless this profile needs a custom executable or proxy command.</small>
+              </label>
+              <label class="field full">
+                <span>Environment</span>
+                <textarea id="profileEnv" rows="3" placeholder="ANTHROPIC_BASE_URL=http://localhost:8082&#10;ANTHROPIC_AUTH_TOKEN=freecc"></textarea>
+                <small>One KEY=value per line. Secrets are stored locally on this PC.</small>
+              </label>
+            </div>
+          </div>
+          <div id="profiles" class="profile-list"></div>
+        </section>
+
+        <section id="accessPanel" class="panel access-panel tab-panel">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Remote Access</p>
+              <h2>Tailscale</h2>
+            </div>
+          </div>
+          <div class="access-list">
+            <a id="localUrl" href="#">--</a>
+            <a id="tailscaleUrl" href="#">Not detected</a>
+          </div>
+          <div id="services" class="services"></div>
+        </section>
+      </section>
+
+      <nav class="mobile-nav" aria-label="Mobile navigation">
+        <button type="button" data-view="home" class="active"><span class="icon-slot" data-icon="home"></span><span>Home</span></button>
+        <button type="button" data-view="sessions"><span class="icon-slot" data-icon="sessions"></span><span>Sessions</span></button>
+        <button type="button" data-view="controls"><span class="icon-slot" data-icon="controls"></span><span>Controls</span></button>
+        <button type="button" data-view="logs"><span class="icon-slot" data-icon="logs"></span><span>Logs</span></button>
+        <button type="button" data-view="profiles"><span class="icon-slot" data-icon="profiles"></span><span>More</span></button>
+      </nav>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

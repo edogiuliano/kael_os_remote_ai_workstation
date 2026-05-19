@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remote AI Terminal</title>
+    <link rel="stylesheet" href="/vendor/xterm/css/xterm.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="terminal-body">
+    <main class="terminal-shell">
+      <header class="terminal-header">
+        <div>
+          <p class="eyebrow">Visible Session</p>
+          <h1 id="terminalTitle">Terminal</h1>
+        </div>
+        <span id="terminalBadge" class="badge">Connecting</span>
+      </header>
+      <div id="terminalOutput" class="xterm-host"></div>
+      <form id="terminalForm" class="terminal-input-row">
+        <textarea id="terminalInput" rows="3" placeholder="Write a prompt or command"></textarea>
+        <button type="submit">Send</button>
+      </form>
+    </main>
+    <script src="/vendor/xterm/lib/xterm.js"></script>
+    <script src="/vendor/xterm-addon-fit/lib/addon-fit.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const sessionId = params.get("sessionId");
+      const token = params.get("token") || localStorage.getItem("raw-api-token") || "";
+      const title = document.getElementById("terminalTitle");
+      const badge = document.getElementById("terminalBadge");
+      const host = document.getElementById("terminalOutput");
+      const form = document.getElementById("terminalForm");
+      const input = document.getElementById("terminalInput");
+      const term = new Terminal({
+        convertEol: true,
+        cursorBlink: true,
+        scrollback: 5000,
+        fontFamily: "Cascadia Code, Consolas, monospace",
+        fontSize: 14,
+        theme: {
+          background: "#070b10",
+          foreground: "#f3f7ff",
+          cursor: "#2dd4bf",
+          selectionBackground: "#264861"
+        }
+      });
+      const fitAddon = new FitAddon.FitAddon();
+
+      title.textContent = sessionId ? `Session ${sessionId.slice(0, 8)}` : "Missing session";
+      term.loadAddon(fitAddon);
+      term.open(host);
+      term.focus();
+      fitAndResize();
+
+      function headers() {
+        return {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        };
+      }
+
+      function setBadge(text, online) {
+        badge.textContent = text;
+        badge.className = `badge ${online ? "online" : "offline"}`;
+      }
+
+      async function loadLogs() {
+        if (!sessionId) return;
+        const response = await fetch(`/api/sessions/${sessionId}/logs`, { headers: headers() });
+        if (response.ok) {
+          term.write(await response.text());
+        }
+      }
+
+      async function sendRaw(data) {
+        if (!sessionId || !data) return;
+        const response = await fetch(`/api/sessions/${sessionId}/raw-input`, {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ data })
+        });
+        if (!response.ok) term.writeln(`\r\n[error] ${await response.text()}`);
+      }
+
+      async function sendResize(cols, rows) {
+        if (!sessionId || !cols || !rows) return;
+        await fetch(`/api/sessions/${sessionId}/resize`, {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ cols, rows })
+        }).catch(() => undefined);
+      }
+
+      function fitAndResize() {
+        try {
+          fitAddon.fit();
+          sendResize(term.cols, term.rows);
+        } catch {
+          // The terminal may not be visible during early window layout.
+        }
+      }
+
+      function connect() {
+        if (!sessionId) return;
+        const protocol = location.protocol === "https:" ? "wss" : "ws";
+        const ws = new WebSocket(`${protocol}://${location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`);
+        ws.addEventListener("open", () => setBadge("Live", true));
+        ws.addEventListener("close", () => {
+          setBadge("Reconnecting", false);
+          setTimeout(connect, 2000);
+        });
+        ws.addEventListener("message", (event) => {
+          const message = JSON.parse(event.data);
+          if (message.type === "session.data" && message.sessionId === sessionId) {
+            term.write(message.chunk);
+          }
+          if (message.type === "session.status" && message.session.id === sessionId) {
+            setBadge(message.session.status, message.session.status === "running");
+          }
+        });
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const text = input.value.trim();
+        if (!sessionId || !text) return;
+        input.value = "";
+        const response = await fetch(`/api/sessions/${sessionId}/input`, {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ text })
+        });
+        if (!response.ok) term.writeln(`\r\n[error] ${await response.text()}`);
+      });
+
+      term.onData((data) => {
+        sendRaw(data).catch((error) => term.writeln(`\r\n[error] ${error.message}`));
+      });
+
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          form.requestSubmit();
+        }
+      });
+
+      window.addEventListener("resize", fitAndResize);
+      new ResizeObserver(fitAndResize).observe(host);
+      loadLogs().catch((error) => term.writeln(`[error] ${error.message}`));
+      connect();
+      host.addEventListener("click", () => term.focus());
+    </script>
+  </body>
+</html>

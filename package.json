@@ -1,0 +1,77 @@
+{
+  "name": "remote-ai-workstation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows 11 remote AI workstation for controlling local coding agents from Android.",
+  "type": "module",
+  "main": "dist/desktop/main.js",
+  "scripts": {
+    "dev": "tsx backend/src/server.ts",
+    "build": "tsc -p tsconfig.json && powershell -ExecutionPolicy Bypass -File scripts/copy-desktop-assets.ps1",
+    "start": "node dist/backend/src/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke": "powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1",
+    "desktop:dev": "npm run build && electron dist/desktop/main.js",
+    "desktop:build": "npm run build",
+    "desktop:dist": "npm run desktop:build && powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "dependencies": {
+    "@lydell/node-pty": "^1.2.0-beta.12",
+    "@lydell/node-pty-win32-x64": "^1.2.0-beta.12",
+    "@telegraf/types": "^7.1.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "systeminformation": "^5.25.11",
+    "telegraf": "^4.16.3",
+    "uuid": "^11.0.5",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "build": {
+    "appId": "com.remoteai.workstation",
+    "productName": "Remote AI Workstation",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "frontend/**/*",
+      "package.json",
+      ".env.example"
+    ],
+    "extraMetadata": {
+      "main": "dist/desktop/main.js"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
