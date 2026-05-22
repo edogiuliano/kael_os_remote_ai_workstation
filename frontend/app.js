@@ -5,6 +5,7 @@ const state = {
   sessions: [],
   profiles: [],
   selectedSessionId: "",
+  commandTargetValue: "",
   activeChatSessionId: "",
   activeAgentKind: "",
   activeView: "home",
@@ -25,7 +26,10 @@ const state = {
   terminalLastSize: "",
   terminalFitQueued: false,
   terminalTouchY: 0,
-  pendingAttachments: []
+  pendingAttachments: [],
+  editingProfileId: "",
+  profileFormMode: "",
+  theme: localStorage.getItem("kael-theme") || "dark"
 };
 
 if (bootToken) {
@@ -79,6 +83,12 @@ const el = {
   pcBadge: document.getElementById("pcBadge"),
   gpuBadge: document.getElementById("gpuBadge"),
   launchStatus: document.getElementById("launchStatus"),
+  commandTarget: document.getElementById("commandTarget"),
+  commandTargetBtn: document.getElementById("commandTargetBtn"),
+  commandTargetMenu: document.getElementById("commandTargetMenu"),
+  commandTargetIcon: document.getElementById("commandTargetIcon"),
+  commandTargetLabel: document.getElementById("commandTargetLabel"),
+  commandTargetMeta: document.getElementById("commandTargetMeta"),
   cpuMetric: document.getElementById("cpuMetric"),
   ramMetric: document.getElementById("ramMetric"),
   gpuMetric: document.getElementById("gpuMetric"),
@@ -90,6 +100,9 @@ const el = {
   ramSpark: document.getElementById("ramSpark"),
   gpuSpark: document.getElementById("gpuSpark"),
   diskSpark: document.getElementById("diskSpark"),
+  sideCpuSpark: document.getElementById("sideCpuSpark"),
+  sideRamSpark: document.getElementById("sideRamSpark"),
+  sideGpuSpark: document.getElementById("sideGpuSpark"),
   claudeState: document.getElementById("claudeState"),
   codexState: document.getElementById("codexState"),
   powershellState: document.getElementById("powershellState"),
@@ -104,7 +117,6 @@ const el = {
   logs: document.getElementById("logs"),
   logSessionLabel: document.getElementById("logSessionLabel"),
   promptInput: document.getElementById("promptInput"),
-  sessionSelect: document.getElementById("sessionSelect"),
   sendBtn: document.getElementById("sendBtn"),
   openWindowBtn: document.getElementById("openWindowBtn"),
   agentChatPanel: document.getElementById("agentChatPanel"),
@@ -129,6 +141,12 @@ const el = {
   phoneQrUrl: document.getElementById("phoneQrUrl"),
   accessQrCode: document.getElementById("accessQrCode"),
   accessQrUrl: document.getElementById("accessQrUrl"),
+  sideAccessUrl: document.getElementById("sideAccessUrl"),
+  sideQrCode: document.getElementById("sideQrCode"),
+  sideGpuMetric: document.getElementById("sideGpuMetric"),
+  sideRamMetric: document.getElementById("sideRamMetric"),
+  sideCpuMetric: document.getElementById("sideCpuMetric"),
+  telegramState: document.getElementById("telegramState"),
   chatStopBtn: document.getElementById("chatStopBtn"),
   refreshBtn: document.getElementById("refreshBtn"),
   clearLogsBtn: document.getElementById("clearLogsBtn"),
@@ -143,16 +161,35 @@ const el = {
   profileFormToggle: document.getElementById("profileFormToggle"),
   profileLauncher: document.getElementById("profileLauncher"),
   createProfileBtn: document.getElementById("createProfileBtn"),
+  profileCreateSlot: document.getElementById("profileCreateSlot"),
+  profileFormWrap: document.getElementById("profileFormWrap"),
   profileName: document.getElementById("profileName"),
   profileKind: document.getElementById("profileKind"),
   profileCwd: document.getElementById("profileCwd"),
   profileCommand: document.getElementById("profileCommand"),
-  profileEnv: document.getElementById("profileEnv")
+  profileEnv: document.getElementById("profileEnv"),
+  saveProfileBtn: document.getElementById("saveProfileBtn"),
+  cancelProfileEditBtn: document.getElementById("cancelProfileEditBtn"),
+  settingsPanel: document.getElementById("settingsPanel"),
+  settingsActiveProfile: document.getElementById("settingsActiveProfile"),
+  settingsActiveProfileBadge: document.getElementById("settingsActiveProfileBadge"),
+  settingsTailscale: document.getElementById("settingsTailscale"),
+  settingsLocalUrl: document.getElementById("settingsLocalUrl"),
+  settingsThemeLabel: document.getElementById("settingsThemeLabel"),
+  themeToggleBtn: document.getElementById("themeToggleBtn"),
+  settingsQrBtn: document.getElementById("settingsQrBtn"),
+  settingsQrPanel: document.getElementById("settingsQrPanel"),
+  settingsTokenBtn: document.getElementById("settingsTokenBtn"),
+  telegramFallbackBtn: document.getElementById("telegramFallbackBtn"),
+  lockOnExitBtn: document.getElementById("lockOnExitBtn"),
+  settingsTelegramSwitch: document.getElementById("settingsTelegramSwitch"),
+  settingsLockSwitch: document.getElementById("settingsLockSwitch")
 };
 
 el.tokenInput.value = state.token;
 if (state.token) document.getElementById("authPanel").hidden = true;
 setAppViewportHeight();
+applyTheme(state.theme);
 hydrateStaticIcons();
 setActiveView("home");
 
@@ -201,7 +238,7 @@ function showSetup(setup) {
   el.setupPath.textContent = setup?.configPath ? `Config will be saved to ${setup.configPath}` : "";
   if (setup?.tailscalePath) el.setupTailscalePath.value = setup.tailscalePath;
   detectTailscalePath(false).catch(() => undefined);
-  el.setupBotToken.focus();
+  el.setupPort.focus();
 }
 
 function showDesktopError(params) {
@@ -243,6 +280,7 @@ async function refreshAll() {
     renderStatus(status);
     state.profiles = profiles.profiles || [];
     renderProfiles();
+    renderSettings();
     maybeSuggestDefaultProfile();
     setConnected(true);
   } finally {
@@ -257,7 +295,7 @@ function setConnected(connected) {
 }
 
 function setActiveView(view) {
-  const allowed = new Set(["home", "sessions", "chat", "logs", "profiles", "access"]);
+  const allowed = new Set(["home", "chat", "profiles", "settings", "access"]);
   state.activeView = allowed.has(view) ? view : "home";
   if (el.appMain) el.appMain.dataset.view = state.activeView;
   document.body.dataset.view = state.activeView;
@@ -271,6 +309,7 @@ function setActiveView(view) {
   if (state.activeView === "chat") renderChat();
   if (state.activeView === "chat") scheduleFitChatTerminal();
   if (state.activeView === "access") loadPhoneQr({ showPanel: false }).catch(() => undefined);
+  if (state.activeView === "settings") renderSettings();
 }
 
 function hydrateStaticIcons(root = document) {
@@ -280,9 +319,11 @@ function hydrateStaticIcons(root = document) {
 }
 
 function iconSvg(name) {
-  if (assetIcons[name]) {
+  const inlineName = name.endsWith("-inline") ? name.slice(0, -"-inline".length) : "";
+  if (!inlineName && assetIcons[name]) {
     return `<img class="asset-icon logo-${name}" src="${assetPath(`assets/icons/${assetIcons[name]}`)}" alt="" aria-hidden="true" loading="lazy" decoding="async" />`;
   }
+  if (inlineName) name = inlineName;
 
   const icons = {
     home: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 10.5V20h5v-5h3v5h5v-9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
@@ -290,6 +331,11 @@ function iconSvg(name) {
     controls: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8" cy="17" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
     logs: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8h10M7 12h10M7 16h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 3h14a1 1 0 0 1 1 1v16l-4-2-4 2-4-2-4 2V4a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
     profiles: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21a8 8 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    settings: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M4.2 16.5 6.8 15M17.2 9l2.6-1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+    palette: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 0 0 0 16h1.2a1.9 1.9 0 0 0 1.4-3.2l-.2-.2a1.9 1.9 0 0 1 1.4-3.2H18A3 3 0 0 0 21 10.4 7.8 7.8 0 0 0 12 4Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.2" cy="11" r="1" fill="currentColor"/><circle cx="10.2" cy="8" r="1" fill="currentColor"/><circle cx="13.8" cy="8.2" r="1" fill="currentColor"/></svg>',
+    key: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="14" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="m11 11 8-8M16 6l2 2M14 8l2 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    lock: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    qr: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM15 15h2v2h-2zM18 18h2v2h-2zM14 19h2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
     access: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
     refresh: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 11a6 6 0 0 0-10-4.5L4 10m2 3a6 6 0 0 0 10 4.5l4-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     comfy: '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4" fill="currentColor" opacity=".18"/><path d="M8 12a4 4 0 0 1 7-2.7M16 14.7A4 4 0 0 1 9 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><text x="12" y="14.5" text-anchor="middle" font-size="6" font-weight="900" fill="currentColor">CF</text></svg>',
@@ -363,15 +409,22 @@ function renderStatus(status) {
   el.ramDetail.textContent = `${status.system.memoryUsedGb || "--"} / ${status.system.memoryTotalGb || "--"} GB`;
   el.gpuDetail.textContent = status.system.gpu?.temperatureC ? `${status.system.gpu.temperatureC}C` : status.system.gpu?.model || "GPU status";
   el.gpuBadge.textContent = status.system.gpu?.model ? status.system.gpu.model.replace(/\s+/g, " ").slice(0, 18) : "GPU --";
+  setText(el.sideCpuMetric, `${cpu}%`);
+  setText(el.sideRamMetric, `${ram}%`);
+  setText(el.sideGpuMetric, status.system.gpu?.loadPct === undefined ? "N/A" : `${gpu}%`);
   updateChatSpecs(cpu, ram, gpu);
   drawSpark(el.cpuSpark, state.sparks.cpu, "#60a5fa");
   drawSpark(el.ramSpark, state.sparks.ram, "#58a6ff");
   drawSpark(el.gpuSpark, state.sparks.gpu, "#f08a4b");
   drawSpark(el.diskSpark, state.sparks.disk, "#4ade80");
+  drawSpark(el.sideCpuSpark, state.sparks.cpu, "#65e4bd");
+  drawSpark(el.sideRamSpark, state.sparks.ram, "#f6ead7");
+  drawSpark(el.sideGpuSpark, state.sparks.gpu, "#f4771d");
   setLink(el.localUrl, status.access.localUrl);
   setLink(el.tailscaleUrl, status.access.tailscaleUrl);
   el.tailscaleState.textContent = status.access.tailscaleUrl ? "Detected" : "Missing";
   renderPhoneAccess(status.access.tailscaleUrl || status.access.localUrl);
+  renderSettings();
   renderSessions();
   renderChatHeader();
   renderServices(status.services || []);
@@ -385,6 +438,10 @@ function renderPhoneAccess(url) {
   if (el.accessQrUrl) {
     el.accessQrUrl.textContent = url || "Not detected";
     el.accessQrUrl.href = url || "#";
+  }
+  if (el.sideAccessUrl) {
+    el.sideAccessUrl.textContent = url || "Waiting for Tailscale...";
+    el.sideAccessUrl.href = url || "#";
   }
 }
 
@@ -405,32 +462,27 @@ function setText(node, value) {
 
 function renderSessions() {
   el.sessions.innerHTML = "";
-  el.sessionSelect.innerHTML = "";
   const activeByKind = Object.fromEntries(state.sessions.map((session) => [session.kind, session]));
   setText(el.claudeState, activeByKind.claude?.status || "Ready");
   setText(el.codexState, activeByKind.codex?.status || "Ready");
   setText(el.powershellState, activeByKind.powershell?.status || "Tool");
+  renderCommandTargetOptions();
 
   if (state.sessions.length === 0) {
     el.sessions.innerHTML = `<div class="empty-state">No active sessions yet. Start Claude, Codex, or one of your saved profiles.</div>`;
-    el.sessionSelect.innerHTML = `<option value="">No active session</option>`;
     renderChatHeader();
     return;
   }
 
   for (const session of state.sessions) {
-    const option = document.createElement("option");
-    option.value = session.id;
-    option.textContent = `${session.name} (${session.status})`;
-    el.sessionSelect.appendChild(option);
-
     const item = document.createElement("article");
     item.className = "session";
     item.innerHTML = `
       <div class="session-head">
+        <span class="session-agent-icon">${iconSvg(iconForKind(session.kind))}</span>
         <div>
           <h3>${escapeHtml(session.name)}</h3>
-          <p>${escapeHtml(session.kind)} - ${escapeHtml(session.id.slice(0, 8))}${session.profileName ? ` - ${escapeHtml(session.profileName)}` : ""}</p>
+          <p>${escapeHtml(agentLabel(session.kind))} - ${escapeHtml(session.id.slice(0, 8))}${session.profileName ? ` - ${escapeHtml(session.profileName)}` : ""}</p>
         </div>
         <span class="status ${session.status}">${session.status}</span>
       </div>
@@ -444,41 +496,130 @@ function renderSessions() {
     el.sessions.appendChild(item);
   }
 
-  if (state.selectedSessionId) el.sessionSelect.value = state.selectedSessionId;
   if (!state.selectedSessionId && state.sessions[0]) state.selectedSessionId = state.sessions[0].id;
   if (!state.activeChatSessionId && state.selectedSessionId) state.activeChatSessionId = state.selectedSessionId;
   renderChatHeader();
 }
 
+function buildCommandTargets() {
+  const activeSessions = state.sessions.filter((session) => ["starting", "running"].includes(session.status));
+  const activeProfileIds = new Set(activeSessions.map((session) => session.profileId).filter(Boolean));
+  const sessionTargets = activeSessions.map((session) => ({
+    type: "session",
+    value: `session:${session.id}`,
+    id: session.id,
+    kind: session.kind,
+    label: session.profileName || session.name,
+    meta: agentLabel(session.kind),
+    status: session.status
+  }));
+  const profileTargets = state.profiles
+    .filter((profile) => ["claude", "codex"].includes(profile.kind) && !activeProfileIds.has(profile.id))
+    .map((profile) => ({
+      type: "profile",
+      value: `profile:${profile.id}`,
+      id: profile.id,
+      kind: profile.kind,
+      label: profile.name,
+      meta: agentLabel(profile.kind),
+      status: "Ready"
+    }));
+  return [...sessionTargets, ...profileTargets];
+}
+
+function renderCommandTargetOptions() {
+  if (!el.commandTargetBtn || !el.commandTargetMenu) return;
+  const targets = buildCommandTargets();
+  const current = state.commandTargetValue || (state.selectedSessionId ? `session:${state.selectedSessionId}` : "");
+  const selected = targets.find((target) => target.value === current) || targets.find((target) => target.type === "session") || targets[0];
+
+  state.commandTargetValue = selected?.value || "";
+  el.commandTargetBtn.disabled = !selected;
+  el.commandTargetBtn.setAttribute("aria-expanded", el.commandTargetMenu.hidden ? "false" : "true");
+  el.commandTargetIcon.innerHTML = selected ? iconSvg(iconForKind(selected.kind)) : "";
+  el.commandTargetLabel.textContent = selected ? selected.label : "Create a Claude or Codex profile first";
+  el.commandTargetMeta.textContent = selected ? `${selected.meta} - ${selected.status}` : "No command target";
+  el.commandTargetMenu.innerHTML = targets
+    .map(
+      (target) => `
+        <button
+          class="command-target-option ${target.value === state.commandTargetValue ? "selected" : ""}"
+          type="button"
+          role="option"
+          aria-selected="${target.value === state.commandTargetValue ? "true" : "false"}"
+          data-target-value="${escapeHtml(target.value)}"
+        >
+          <span class="command-target-option-icon" aria-hidden="true">${iconSvg(iconForKind(target.kind))}</span>
+          <span class="command-target-option-copy">
+            <strong>${escapeHtml(target.label)}</strong>
+            <small>${escapeHtml(target.meta)} - ${escapeHtml(target.status)}</small>
+          </span>
+        </button>
+      `
+    )
+    .join("");
+}
+
+function closeCommandTargetMenu() {
+  if (!el.commandTargetMenu || !el.commandTargetBtn) return;
+  el.commandTargetMenu.hidden = true;
+  el.commandTargetBtn.setAttribute("aria-expanded", "false");
+}
+
+function toggleCommandTargetMenu() {
+  if (!el.commandTargetMenu || !el.commandTargetBtn || el.commandTargetBtn.disabled) return;
+  const nextOpen = el.commandTargetMenu.hidden;
+  el.commandTargetMenu.hidden = !nextOpen;
+  el.commandTargetBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+}
+
 function renderProfiles() {
   renderProfileLauncher();
   el.profiles.innerHTML = "";
+  if (el.profileFormWrap && !state.profileFormMode) {
+    el.profileFormWrap.hidden = true;
+    el.profileCreateSlot?.appendChild(el.profileFormWrap);
+  }
   if (state.loadingProfileId) {
     el.profiles.innerHTML = `<div class="loading-state">Starting profile and opening the terminal window...</div>`;
     return;
   }
   if (state.profiles.length === 0) {
     el.profiles.innerHTML = `<div class="empty-state">No profiles yet. Create one per repo so agents always start in the right folder.</div>`;
+    if (state.profileFormMode === "create") placeProfileForm(el.profileCreateSlot);
+    renderCommandTargetOptions();
     return;
   }
   for (const profile of state.profiles) {
     const envCount = profile.env ? Object.keys(profile.env).length : 0;
+    const active = activeSessionForProfile(profile.id);
     const item = document.createElement("article");
-    item.className = "profile-item";
+    item.className = `profile-item profile-card profile-${profile.kind}`;
     item.innerHTML = `
-      <div>
-        <strong>${escapeHtml(profile.name)}</strong>
-        <span>${escapeHtml(profile.kind)} - ${escapeHtml(profile.cwd)}</span>
-        <span class="profile-meta">${profile.command ? `Command: ${escapeHtml(profile.command)}` : "Default command"} &middot; ${envCount} env value${envCount === 1 ? "" : "s"}</span>
+      <div class="profile-identity">
+        <span class="profile-agent-icon">${iconSvg(iconForKind(profile.kind))}</span>
+        <div>
+          <strong>${escapeHtml(profile.name)}</strong>
+          <span>${escapeHtml(agentLabel(profile.kind))} · ${escapeHtml(compactPath(profile.cwd) || "Default folder")}</span>
+          <span class="profile-meta">${profile.command ? `Command: ${escapeHtml(profile.command)}` : "Default command"} · ${envCount} env value${envCount === 1 ? "" : "s"}${active ? " · running" : ""}</span>
+        </div>
+        <em class="profile-state ${active ? "running" : ""}">${active ? "Running" : "Ready"}</em>
       </div>
       <div class="profile-actions">
         <button data-action="start-profile" data-id="${profile.id}">${state.loadingProfileId === profile.id ? "Starting" : "Start"}</button>
+        <button data-action="edit-profile" data-id="${profile.id}">Edit</button>
         <button data-action="open-profile-folder" data-id="${profile.id}">Open</button>
         <button data-action="delete-profile" data-id="${profile.id}">Delete</button>
       </div>
     `;
     el.profiles.appendChild(item);
+    if (state.profileFormMode === "edit" && state.editingProfileId === profile.id) {
+      placeProfileForm(el.profiles);
+    }
   }
+  if (state.profileFormMode === "create") placeProfileForm(el.profileCreateSlot);
+  renderCommandTargetOptions();
+  renderSettings();
 }
 
 function renderProfileLauncher() {
@@ -503,6 +644,88 @@ function renderProfileLauncher() {
       <button data-action="start-profile" data-id="${primary.id}" class="primary-action">${active ? "Focus" : "Launch"}</button>
     </div>
   `;
+}
+
+function renderSettings() {
+  const activeSession = state.sessions.find((session) => ["starting", "running"].includes(session.status)) || state.sessions[0];
+  const activeProfile = activeSession?.profileName || activeSession?.name || state.profiles[0]?.name || "";
+  if (el.settingsActiveProfile) el.settingsActiveProfile.textContent = activeProfile || "No active profile";
+  if (el.settingsActiveProfileBadge) el.settingsActiveProfileBadge.textContent = activeSession?.status || "Idle";
+  if (el.settingsTailscale) {
+    const text = el.tailscaleUrl?.textContent?.trim();
+    el.settingsTailscale.textContent = text && text !== "Not detected" ? text.replace(/^https?:\/\//, "") : "Not detected";
+  }
+  if (el.settingsLocalUrl) el.settingsLocalUrl.textContent = el.localUrl?.textContent?.trim()?.replace(/^https?:\/\//, "") || "127.0.0.1";
+  if (el.settingsThemeLabel) el.settingsThemeLabel.textContent = state.theme === "cream" ? "Manual · Cream" : "System · Dark";
+}
+
+function applyTheme(theme) {
+  state.theme = theme === "cream" ? "cream" : "dark";
+  document.body.dataset.theme = state.theme;
+  localStorage.setItem("kael-theme", state.theme);
+  renderSettings();
+}
+
+function agentLabel(kind) {
+  const labels = {
+    claude: "Claude Code",
+    codex: "Codex CLI",
+    powershell: "PowerShell",
+    custom: "Custom Tool"
+  };
+  return labels[kind] || kind;
+}
+
+function editProfile(id) {
+  const profile = state.profiles.find((item) => item.id === id);
+  if (!profile) return;
+  state.editingProfileId = id;
+  state.profileFormMode = "edit";
+  document.getElementById("profilesPanel")?.classList.add("expanded");
+  el.profileName.value = profile.name || "";
+  el.profileKind.value = profile.kind || "custom";
+  el.profileCwd.value = profile.cwd || "";
+  el.profileCommand.value = profile.command || "";
+  el.profileEnv.value = Object.entries(profile.env || {}).map(([key, value]) => `${key}=${value}`).join("\n");
+  el.saveProfileBtn.innerHTML = `${iconSvg("approve")}<span>Save</span>`;
+  renderProfiles();
+  el.profileName.focus();
+}
+
+function resetProfileForm() {
+  state.editingProfileId = "";
+  state.profileFormMode = "";
+  el.profileName.value = "";
+  el.profileCommand.value = "";
+  el.profileEnv.value = "";
+  el.profileFormWrap.hidden = true;
+  el.profileCreateSlot?.appendChild(el.profileFormWrap);
+  el.createProfileBtn?.classList.remove("active");
+  el.saveProfileBtn.innerHTML = `${iconSvg("approve")}<span>Save</span>`;
+  renderProfiles();
+}
+
+function beginCreateProfile() {
+  if (state.profileFormMode === "create") {
+    resetProfileForm();
+    return;
+  }
+  state.editingProfileId = "";
+  state.profileFormMode = "create";
+  el.profileName.value = "";
+  el.profileKind.value = "codex";
+  el.profileCwd.value = "";
+  el.profileCommand.value = "";
+  el.profileEnv.value = "";
+  el.createProfileBtn?.classList.add("active");
+  placeProfileForm(el.profileCreateSlot);
+  el.profileName.focus();
+}
+
+function placeProfileForm(target) {
+  if (!el.profileFormWrap || !target) return;
+  el.profileFormWrap.hidden = false;
+  target.appendChild(el.profileFormWrap);
 }
 
 function defaultProfileForKind(kind) {
@@ -534,9 +757,10 @@ function enterChat(sessionId) {
   const session = state.sessions.find((item) => item.id === sessionId);
   state.activeChatSessionId = sessionId;
   state.selectedSessionId = sessionId;
+  state.commandTargetValue = `session:${sessionId}`;
   state.activeAgentKind = session?.kind || state.activeAgentKind || "";
-  if (el.sessionSelect) el.sessionSelect.value = sessionId;
   setActiveView("chat");
+  renderCommandTargetOptions();
   renderChatHeader();
   void connectChatTerminal(sessionId);
 }
@@ -619,18 +843,18 @@ function ensureChatTerminal() {
     fontSize: 13,
     lineHeight: 1.12,
     theme: {
-      background: "#031419",
-      foreground: "#e7fff7",
-      cursor: "#65e4bd",
-      selectionBackground: "#19515b",
-      black: "#06191f",
-      blue: "#49c9e8",
-      cyan: "#54dfe4",
+      background: "#11110f",
+      foreground: "#f6ead7",
+      cursor: "#f4771d",
+      selectionBackground: "#4a2a18",
+      black: "#0a0b0b",
+      blue: "#d98c4c",
+      cyan: "#f2c37b",
       green: "#65e4bd",
-      magenta: "#c4a7ff",
-      red: "#ff6b7a",
-      yellow: "#f5c15c",
-      white: "#effffb"
+      magenta: "#c58a5c",
+      red: "#d65b63",
+      yellow: "#f2c37b",
+      white: "#fff4df"
     }
   });
   const fitAddon = new FitAddon.FitAddon();
@@ -741,6 +965,7 @@ function iconForKind(kind) {
   if (kind === "claude") return "claude";
   if (kind === "codex") return "codex";
   if (kind === "powershell") return "terminal";
+  if (kind === "custom") return "settings";
   return "chat";
 }
 
@@ -755,6 +980,7 @@ function renderServices(services) {
   const byName = Object.fromEntries(services.map((service) => [service.name.toLowerCase(), service]));
   el.comfyState.textContent = labelService(byName.comfyui?.status);
   el.ollamaState.textContent = labelService(byName.ollama?.status);
+  if (el.telegramState) el.telegramState.textContent = byName.telegram ? labelService(byName.telegram.status) : "Optional";
   for (const service of services) {
     const item = document.createElement("div");
     item.className = "service-row";
@@ -766,7 +992,7 @@ function renderServices(services) {
 async function loadPhoneQr(options = {}) {
   const target = options.target || "tailscale";
   if (options.showPanel !== false && el.phoneQrPanel) el.phoneQrPanel.hidden = false;
-  const slots = [el.phoneQrCode, el.accessQrCode].filter(Boolean);
+  const slots = [el.phoneQrCode, el.accessQrCode, el.sideQrCode].filter(Boolean);
   for (const slot of slots) {
     slot.innerHTML = `<span class="qr-loading">Generating...</span>`;
   }
@@ -777,6 +1003,7 @@ async function loadPhoneQr(options = {}) {
       slot.innerHTML = result.svg;
     }
     renderPhoneAccess(result.displayUrl || result.url);
+    if (options.notify === false) return;
     if (result.target === "local") {
       showToast("Tailscale URL not detected yet, QR points to local PC access.", "error");
     } else {
@@ -809,6 +1036,7 @@ function pushSpark(key, value) {
 }
 
 function drawSpark(canvas, values, color) {
+  if (!canvas) return;
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.strokeStyle = color;
@@ -860,26 +1088,39 @@ function setLaunchButtons(enabled) {
 }
 
 async function sendInput() {
-  const id = el.sessionSelect.value || state.selectedSessionId;
+  const target = selectedCommandTarget();
   const text = el.promptInput.value.trim();
-  if (!id || !text) return;
+  if (!target || !text) return;
   state.sendingPrompt = true;
   setBusy(el.sendBtn, true, "Sending...");
   try {
-    await api(`/api/sessions/${id}/input`, {
-      method: "POST",
-      body: JSON.stringify({ text })
-    });
+    if (target.type === "profile") {
+      await startProfile(target.id, { prompt: text, openChat: true, openWindow: false });
+    } else {
+      await api(`/api/sessions/${target.id}/input`, {
+        method: "POST",
+        body: JSON.stringify({ text })
+      });
+    }
     el.promptInput.value = "";
-    showToast(`Prompt sent to ${shortId(id)}.`);
+    showToast(target.type === "profile" ? "Profile started with your prompt." : `Prompt sent to ${shortId(target.id)}.`);
   } finally {
     state.sendingPrompt = false;
     setBusy(el.sendBtn, false);
   }
 }
 
+function selectedCommandTarget() {
+  const value = state.commandTargetValue || (state.selectedSessionId ? `session:${state.selectedSessionId}` : "");
+  const [type, id] = value.split(":");
+  if ((type === "session" || type === "profile") && id) return { type, id };
+  if (value && state.sessions.some((session) => session.id === value)) return { type: "session", id: value };
+  return null;
+}
+
 async function sendChatInput() {
-  const id = state.activeChatSessionId || el.sessionSelect.value || state.selectedSessionId;
+  const selectedTarget = selectedCommandTarget();
+  const id = state.activeChatSessionId || (selectedTarget?.type === "session" ? selectedTarget.id : "") || state.selectedSessionId;
   const text = el.chatPromptInput.value.trim();
   if (!id || !text) {
     showToast(id ? "Write a prompt first." : "Choose an agent session first.", "error");
@@ -1003,44 +1244,55 @@ function formatBytes(bytes) {
   return `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`;
 }
 
-async function openWindow(id = el.sessionSelect.value || state.selectedSessionId) {
+async function openWindow(id = undefined) {
+  if (!id) {
+    const target = selectedCommandTarget();
+    id = target?.type === "session" ? target.id : state.selectedSessionId;
+  }
   if (!id) return;
   await api(`/api/sessions/${id}/open-window`, { method: "POST" });
 }
 
-function startProfile(id, options = {}) {
+async function startProfile(id, options = {}) {
   if (!id) return;
   const active = activeSessionForProfile(id);
   if (active) {
     state.selectedSessionId = active.id;
+    if (options.prompt) {
+      await api(`/api/sessions/${active.id}/input`, {
+        method: "POST",
+        body: JSON.stringify({ text: options.prompt })
+      });
+    }
     if (options.openChat) {
       enterChat(active.id);
     } else {
       openWindow(active.id).catch((error) => showToast(cleanError(error), "error"));
       showToast(`Focused ${active.name}.`);
     }
-    return;
+    return active;
   }
   state.loadingProfileId = id;
   renderProfiles();
-  api("/api/sessions/start-profile", { method: "POST", body: JSON.stringify({ profileId: id, openWindow: options.openWindow !== false }) })
-    .then((result) => {
-      state.selectedSessionId = result.session.id;
-      if (options.openChat) state.activeChatSessionId = result.session.id;
-      showToast(`${result.session.name} started.`);
-      return refreshAll();
-    })
-    .then(() => {
-      if (options.openChat) enterChat(state.selectedSessionId);
-    })
-    .catch((error) => {
-      showToast(cleanError(error), "error");
-      appendLog(`[error] ${cleanError(error)}\n`);
-    })
-    .finally(() => {
-      state.loadingProfileId = "";
-      renderProfiles();
+  try {
+    const result = await api("/api/sessions/start-profile", {
+      method: "POST",
+      body: JSON.stringify({ profileId: id, openWindow: options.openWindow !== false, prompt: options.prompt })
     });
+    state.selectedSessionId = result.session.id;
+    if (options.openChat) state.activeChatSessionId = result.session.id;
+    showToast(`${result.session.name} started.`);
+    await refreshAll();
+    if (options.openChat) enterChat(state.selectedSessionId);
+    return result.session;
+  } catch (error) {
+    showToast(cleanError(error), "error");
+    appendLog(`[error] ${cleanError(error)}\n`);
+    throw error;
+  } finally {
+    state.loadingProfileId = "";
+    renderProfiles();
+  }
 }
 
 async function loadLogs(id) {
@@ -1064,16 +1316,18 @@ async function createProfile() {
     el.profileName.focus();
     return;
   }
-  setBusy(el.createProfileBtn, true, "Creating...");
+  const editing = Boolean(state.editingProfileId);
+  setBusy(el.saveProfileBtn, true, editing ? "Saving..." : "Creating...");
   try {
-    await api("/api/profiles", { method: "POST", body: JSON.stringify(payload) });
-    showToast("Profile created.");
+    await api(editing ? `/api/profiles/${state.editingProfileId}` : "/api/profiles", {
+      method: editing ? "PUT" : "POST",
+      body: JSON.stringify(payload)
+    });
+    showToast(editing ? "Profile saved." : "Profile created.");
   } finally {
-    setBusy(el.createProfileBtn, false);
+    setBusy(el.saveProfileBtn, false);
   }
-  el.profileName.value = "";
-  el.profileCommand.value = "";
-  el.profileEnv.value = "";
+  resetProfileForm();
   await refreshAll();
 }
 
@@ -1178,7 +1432,7 @@ el.setupForm.addEventListener("submit", async (event) => {
   if (!window.workstation) return;
 
   el.setupStatus.className = "setup-status";
-  el.setupStatus.textContent = "Saving config. This can take a few seconds while Telegram starts.";
+  el.setupStatus.textContent = "Creating local config. This can take a few seconds while KAEL starts.";
   el.setupSaveBtn.disabled = true;
 
   try {
@@ -1261,6 +1515,16 @@ document.querySelectorAll("[data-view-target]").forEach((button) => {
   button.addEventListener("click", () => setActiveView(button.dataset.viewTarget));
 });
 
+document.getElementById("addToolBtn")?.addEventListener("click", () => {
+  setActiveView("profiles");
+  document.getElementById("profilesPanel")?.classList.add("expanded");
+  beginCreateProfile();
+  if (el.profileKind) el.profileKind.value = "custom";
+  if (el.profileName && !el.profileName.value.trim()) el.profileName.value = "Custom Tool";
+  el.profileCommand?.focus();
+  showToast("Create a custom tool profile with its command and working folder.");
+});
+
 el.sessions.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
@@ -1268,7 +1532,7 @@ el.sessions.addEventListener("click", (event) => {
   if (button.dataset.action === "chat") enterChat(id);
   if (button.dataset.action === "open") openWindow(id).catch((error) => appendLog(`[error] ${cleanError(error)}\n`));
   if (button.dataset.action === "logs") {
-    loadLogs(id).then(() => setActiveView("logs")).catch((error) => appendLog(`[error] ${cleanError(error)}\n`));
+    loadLogs(id).then(() => setActiveView("settings")).catch((error) => appendLog(`[error] ${cleanError(error)}\n`));
   }
   if (button.dataset.action === "stop") {
     api(`/api/sessions/${id}/stop`, { method: "POST" }).then(refreshAll).catch((error) => appendLog(`[error] ${cleanError(error)}\n`));
@@ -1279,7 +1543,8 @@ el.profiles.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
   const id = button.dataset.id;
-  if (button.dataset.action === "start-profile") startProfile(id);
+  if (button.dataset.action === "start-profile") startProfile(id).catch((error) => showToast(cleanError(error), "error"));
+  if (button.dataset.action === "edit-profile") editProfile(id);
   if (button.dataset.action === "open-profile-folder") {
     const session = activeSessionForProfile(id);
     if (!session) {
@@ -1304,7 +1569,32 @@ el.profiles.addEventListener("click", (event) => {
 el.profileLauncher?.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
-  if (button.dataset.action === "start-profile") startProfile(button.dataset.id, { openChat: true, openWindow: false });
+  if (button.dataset.action === "start-profile") startProfile(button.dataset.id, { openChat: true, openWindow: false }).catch((error) => showToast(cleanError(error), "error"));
+});
+
+el.commandTargetBtn?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleCommandTargetMenu();
+});
+el.commandTargetMenu?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-target-value]");
+  if (!button) return;
+  state.commandTargetValue = button.dataset.targetValue || "";
+  const target = selectedCommandTarget();
+  if (target?.type === "session") {
+    state.selectedSessionId = target.id;
+    state.activeChatSessionId = target.id;
+    renderChatHeader();
+  }
+  renderCommandTargetOptions();
+  closeCommandTargetMenu();
+});
+document.addEventListener("click", (event) => {
+  if (el.commandTarget?.contains(event.target)) return;
+  closeCommandTargetMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeCommandTargetMenu();
 });
 
 el.saveTokenBtn.addEventListener("click", () => {
@@ -1322,6 +1612,12 @@ el.chatPromptInput.addEventListener("keydown", (event) => {
   }
 });
 el.chatFileInput?.addEventListener("change", () => handleChatFiles(el.chatFileInput.files || []).catch((error) => showToast(cleanError(error), "error")));
+el.chatPromptInput?.addEventListener("paste", (event) => {
+  const files = [...(event.clipboardData?.files || [])];
+  if (!files.length) return;
+  event.preventDefault();
+  handleChatFiles(files).catch((error) => showToast(cleanError(error), "error"));
+});
 el.chatAttachmentList?.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-remove-attachment]");
   if (!button) return;
@@ -1356,9 +1652,29 @@ el.profileFormToggle?.addEventListener("click", () => {
   const panel = document.getElementById("profilesPanel");
   panel?.classList.add("expanded");
   setActiveView("profiles");
-  el.profileFormToggle.textContent = "Edit";
+  beginCreateProfile();
 });
-el.createProfileBtn.addEventListener("click", () => createProfile().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
+el.cancelProfileEditBtn?.addEventListener("click", resetProfileForm);
+el.createProfileBtn.addEventListener("click", beginCreateProfile);
+el.saveProfileBtn?.addEventListener("click", () => createProfile().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
+el.themeToggleBtn?.addEventListener("click", () => {
+  applyTheme(state.theme === "cream" ? "dark" : "cream");
+  showToast(state.theme === "cream" ? "Cream theme enabled." : "Dark theme enabled.");
+});
+el.settingsQrBtn?.addEventListener("click", () => {
+  const willOpen = Boolean(el.settingsQrPanel?.hidden);
+  if (el.settingsQrPanel) el.settingsQrPanel.hidden = !willOpen;
+  if (willOpen) loadPhoneQr({ showPanel: false }).catch((error) => showToast(cleanError(error), "error"));
+});
+el.settingsTokenBtn?.addEventListener("click", () => {
+  document.getElementById("authPanel").hidden = false;
+  el.tokenInput.focus();
+});
+el.telegramFallbackBtn?.addEventListener("click", () => showToast("Telegram fallback is optional. Configure its token from a Telegram profile/env when needed."));
+el.lockOnExitBtn?.addEventListener("click", () => {
+  el.settingsLockSwitch?.classList.toggle("on");
+  showToast(el.settingsLockSwitch?.classList.contains("on") ? "Lock on exit enabled." : "Lock on exit disabled.");
+});
 window.addEventListener("resize", handleViewportResize);
 window.visualViewport?.addEventListener("resize", handleViewportResize);
 

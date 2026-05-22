@@ -3,7 +3,14 @@
   "short_name": "KAEL OS",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#061116",
-  "theme_color": "#071b22",
-  "icons": []
+  "background_color": "#0e0f0e",
+  "theme_color": "#11110f",
+  "icons": [
+    {
+      "src": "assets/icons/logo-mark.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }

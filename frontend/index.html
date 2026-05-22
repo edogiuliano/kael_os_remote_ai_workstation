@@ -3,8 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#071b22" />
+    <meta name="theme-color" content="#11110f" />
     <title>KAEL OS</title>
+    <link rel="icon" href="assets/icons/logo-mark.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="/vendor/xterm/css/xterm.css" />
     <link rel="stylesheet" href="styles.css" />
@@ -13,14 +14,16 @@
     <section id="setupOverlay" class="setup-overlay" hidden>
       <form id="setupForm" class="setup-card">
         <p class="eyebrow">First Run Setup</p>
-        <h1>Connect Telegram</h1>
-        <p class="setup-copy">Your bot token stays on this PC. The private API token is generated automatically.</p>
+        <h1>Start KAEL OS</h1>
+        <p class="setup-copy">KAEL OS will create a private local token, pick a port, and keep access inside your own PC or Tailscale network.</p>
 
-        <label for="setupBotToken">Telegram bot token</label>
-        <input id="setupBotToken" type="password" placeholder="123456789:AA..." autocomplete="off" required />
+        <div class="setup-optional-telegram" hidden>
+          <label for="setupBotToken">Telegram bot token</label>
+          <input id="setupBotToken" type="password" placeholder="Optional: 123456789:AA..." autocomplete="off" />
 
-        <label for="setupChatId">Telegram chat id</label>
-        <input id="setupChatId" type="text" placeholder="123456789" autocomplete="off" required />
+          <label for="setupChatId">Telegram chat id</label>
+          <input id="setupChatId" type="text" placeholder="Optional: 123456789" autocomplete="off" />
+        </div>
 
         <label for="setupPort">Local port</label>
         <input id="setupPort" type="number" min="1024" max="65535" value="8787" required />
@@ -32,7 +35,7 @@
           <button id="chooseTailscaleBtn" type="button">Browse</button>
         </div>
 
-        <button id="setupSaveBtn" type="submit">Create Config And Start</button>
+        <button id="setupSaveBtn" type="submit">Create Local Config</button>
         <p id="setupStatus" class="setup-status"></p>
         <p id="setupPath" class="setup-path"></p>
       </form>
@@ -53,22 +56,19 @@
 
     <main class="app-frame">
       <aside class="app-rail" aria-label="Primary navigation">
-        <div class="rail-mark" aria-label="KAEL OS">K</div>
+        <div class="rail-mark" aria-label="KAEL OS"><img src="assets/icons/logo-mark.png" alt="" /></div>
         <nav class="rail-nav">
           <button class="rail-link active" type="button" data-view="home" data-tip="Home - mission control and quick launch" aria-label="Home">
             <span class="icon-slot" data-icon="home"></span>
           </button>
-          <button class="rail-link" type="button" data-view="sessions" data-tip="Sessions - active agents and actions" aria-label="Sessions">
-            <span class="icon-slot" data-icon="sessions"></span>
-          </button>
           <button class="rail-link" type="button" data-view="chat" data-tip="Agent Terminal - live CLI with prompt box" aria-label="Agent Terminal">
             <span class="icon-slot" data-icon="chat"></span>
           </button>
-          <button class="rail-link" type="button" data-view="logs" data-tip="Logs - raw terminal output" aria-label="Logs">
-            <span class="icon-slot" data-icon="logs"></span>
-          </button>
           <button class="rail-link" type="button" data-view="profiles" data-tip="Profiles - repos, commands and env values" aria-label="Profiles">
             <span class="icon-slot" data-icon="profiles"></span>
+          </button>
+          <button class="rail-link" type="button" data-view="settings" data-tip="More - access, appearance and security" aria-label="More">
+            <span class="icon-slot" data-icon="settings"></span>
           </button>
           <button class="rail-link" type="button" data-view="access" data-tip="Access - local and Tailscale URLs" aria-label="Access">
             <span class="icon-slot" data-icon="access"></span>
@@ -80,8 +80,8 @@
         <header class="topbar">
           <div class="brand-lockup">
             <div class="brand-text">
-              <p class="eyebrow">KAEL OS</p>
-              <h1>Mobile Mission Control</h1>
+              <p class="eyebrow">Command Center</p>
+              <h1>KAEL OS</h1>
             </div>
             <div class="meta-row">
               <span id="connectionBadge" class="badge">Connecting</span>
@@ -108,6 +108,37 @@
         </section>
 
         <section id="dashboard" class="dashboard-grid">
+          <section id="commandPanel" class="panel command-panel command-home-panel">
+            <div class="command-brand">
+              <div>
+                <p class="eyebrow">Command Deck</p>
+                <h2>Ask an agent or start a workflow</h2>
+              </div>
+            </div>
+            <textarea id="promptInput" rows="2" placeholder="Ask Claude, Codex, or your selected tool"></textarea>
+            <div class="row command-actions">
+              <div id="commandTarget" class="command-target">
+                <button
+                  id="commandTargetBtn"
+                  class="command-target-btn"
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls="commandTargetMenu"
+                >
+                  <span id="commandTargetIcon" class="command-target-icon" aria-hidden="true"></span>
+                  <span class="command-target-copy">
+                    <strong id="commandTargetLabel">Choose an agent</strong>
+                    <small id="commandTargetMeta">Claude or Codex</small>
+                  </span>
+                  <span class="command-target-chevron" aria-hidden="true"></span>
+                </button>
+                <div id="commandTargetMenu" class="command-target-menu" role="listbox" hidden></div>
+              </div>
+              <button id="sendBtn" class="primary-action"><span class="icon-slot" data-icon="send"></span><span>Send</span></button>
+            </div>
+          </section>
+
           <section class="panel quick-panel">
             <div class="section-header compact-header">
               <div>
@@ -154,13 +185,13 @@
                   <small id="tailscaleState">Private</small>
                 </span>
               </button>
-              <a class="service-card service-telegram link-card" id="telegramCard" href="https://web.telegram.org/" target="_blank" rel="noreferrer">
-                <span class="service-icon" data-icon="telegram" aria-hidden="true"></span>
+              <button class="service-card service-custom" type="button" id="addToolBtn">
+                <span class="service-icon" data-icon="plus" aria-hidden="true"></span>
                 <span class="service-copy">
-                  <strong>Telegram</strong>
-                  <small>Notify only</small>
+                  <strong>Add Tool</strong>
+                  <small>Custom command</small>
                 </span>
-              </a>
+              </button>
             </div>
           </section>
 
@@ -213,16 +244,34 @@
             <div id="profileLauncher" class="profile-launcher"></div>
           </section>
 
-          <section id="logsPanel" class="panel logs-panel log-preview-panel">
-            <div class="section-header">
-              <div>
-                <p class="eyebrow">Log Preview</p>
-                <h2>Latest Output <span id="logSessionLabel"></span></h2>
+          <aside class="workstation-side">
+            <section class="panel side-panel status-panel">
+              <div class="section-header">
+                <div>
+                  <p class="eyebrow">Workstation</p>
+                  <h2>PC Pulse</h2>
+                </div>
+                <span class="soft-label">Local</span>
               </div>
-              <button id="clearLogsBtn" class="ghost-button">Clear</button>
-            </div>
-            <pre id="logs" class="logs"></pre>
-          </section>
+              <div class="side-status-grid compact-status-grid">
+                <span><strong id="sideGpuMetric">--</strong><small>GPU</small><canvas id="sideGpuSpark" width="96" height="24"></canvas></span>
+                <span><strong id="sideRamMetric">--</strong><small>RAM</small><canvas id="sideRamSpark" width="96" height="24"></canvas></span>
+                <span><strong id="sideCpuMetric">--</strong><small>CPU</small><canvas id="sideCpuSpark" width="96" height="24"></canvas></span>
+              </div>
+            </section>
+            <section class="panel side-panel side-access-card">
+              <p class="eyebrow">Private Access</p>
+              <h2>Phone Access</h2>
+              <a id="sideAccessUrl" href="#" target="_blank" rel="noreferrer">Waiting for Tailscale...</a>
+              <button type="button" class="ghost-button" data-view-target="settings"><span class="icon-slot" data-icon="qr"></span><span>Show QR in More</span></button>
+            </section>
+            <section class="panel side-panel telegram-optional-card">
+              <p class="eyebrow">Optional</p>
+              <h2>Telegram fallback</h2>
+              <p class="muted">Use it only for notifications or emergency control.</p>
+              <span id="telegramState" class="mini-badge">Optional</span>
+            </section>
+          </aside>
         </section>
 
         <section id="agentChatPanel" class="panel agent-chat-panel tab-panel">
@@ -280,20 +329,7 @@
           </div>
         </section>
 
-        <section id="commandPanel" class="panel command-panel tab-panel">
-          <div class="section-header">
-            <div>
-              <p class="eyebrow">Command Deck</p>
-              <h2>Send Prompt</h2>
-            </div>
-            <select id="sessionSelect" title="Selected session"></select>
-          </div>
-          <textarea id="promptInput" rows="3" placeholder="Describe the next task for the selected agent"></textarea>
-          <div class="row command-actions">
-            <button id="sendBtn" class="primary-action"><span class="icon-slot" data-icon="send"></span><span>Send</span></button>
-            <button id="openWindowBtn"><span class="icon-slot" data-icon="window"></span><span>Open Window</span></button>
-          </div>
-        </section>
+        <button id="openWindowBtn" class="hidden-action" hidden>Open Window</button>
 
         <section id="controlsPanel" class="panel actions-panel tab-panel" hidden>
           <button id="telegramStatusBtn" type="button">Send Status</button>
@@ -309,11 +345,14 @@
           <div class="section-header">
             <div>
               <p class="eyebrow">Agent Profiles</p>
-              <h2>Create / Edit Profile</h2>
+              <h2>Create Profile</h2>
             </div>
-            <button id="createProfileBtn" class="primary-action"><span class="icon-slot" data-icon="plus"></span><span>Create</span></button>
+            <div class="profile-header-actions">
+              <button id="createProfileBtn" class="icon-button create-profile-toggle" type="button" title="Create profile" aria-label="Create profile"><span class="icon-slot" data-icon="plus"></span></button>
+            </div>
           </div>
-          <div id="profileFormWrap" class="profile-form-wrap">
+          <div id="profileCreateSlot" class="profile-form-slot"></div>
+          <div id="profileFormWrap" class="profile-form-wrap" hidden>
             <div class="profile-form">
               <label class="field">
                 <span>Name</span>
@@ -342,12 +381,135 @@
               </label>
               <label class="field full">
                 <span>Environment</span>
-                <textarea id="profileEnv" rows="3" placeholder="ANTHROPIC_BASE_URL=http://localhost:8082&#10;ANTHROPIC_AUTH_TOKEN=freecc"></textarea>
+                <textarea id="profileEnv" rows="3" placeholder="OPENAI_BASE_URL=http://127.0.0.1:11434/v1&#10;MODEL_ROUTER=local"></textarea>
                 <small>One KEY=value per line. Secrets are stored locally on this PC.</small>
               </label>
+              <div class="field full optional-integrations">
+                <span>Optional integrations</span>
+                <small>Telegram is now a fallback. Add TELEGRAM_BOT_TOKEN and chat ids here only if you want remote notifications later.</small>
+              </div>
+              <div class="field full form-actions">
+                <button id="saveProfileBtn" class="primary-action" type="button"><span class="icon-slot" data-icon="approve"></span><span>Save</span></button>
+                <button id="cancelProfileEditBtn" class="ghost-button" type="button">Cancel</button>
+              </div>
             </div>
           </div>
           <div id="profiles" class="profile-list"></div>
+        </section>
+
+        <section id="settingsPanel" class="panel settings-panel tab-panel">
+          <div class="settings-title">
+            <div>
+              <p class="eyebrow">KAEL OS</p>
+              <h2>More</h2>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <p class="settings-label">Profiles</p>
+            <button class="settings-row" type="button" data-view-target="profiles">
+              <span class="settings-icon" data-icon="profiles"></span>
+              <span>
+                <strong>Active profile</strong>
+                <small id="settingsActiveProfile">No active profile</small>
+              </span>
+              <em id="settingsActiveProfileBadge">Idle</em>
+            </button>
+            <button class="settings-row" type="button" data-view-target="profiles">
+              <span class="settings-icon" data-icon="settings"></span>
+              <span>
+                <strong>Manage profiles</strong>
+                <small>Create, edit or switch profiles</small>
+              </span>
+              <span class="settings-chevron">›</span>
+            </button>
+          </div>
+
+          <div class="settings-group">
+            <p class="settings-label">Access</p>
+            <button class="settings-row" type="button" id="settingsQrBtn">
+              <span class="settings-icon" data-icon="access"></span>
+              <span>
+                <strong>Phone QR Access</strong>
+                <small>Scan to open this console</small>
+              </span>
+              <span class="icon-slot" data-icon="qr"></span>
+            </button>
+            <div id="settingsQrPanel" class="settings-detail qr-detail" hidden>
+              <a id="accessQrUrl" href="#" target="_blank" rel="noreferrer">Waiting for Tailscale...</a>
+              <div id="accessQrCode" class="phone-qr-code"></div>
+            </div>
+            <button class="settings-row" type="button" data-view-target="access">
+              <span class="settings-icon" data-icon="tailscale"></span>
+              <span>
+                <strong>Tailscale</strong>
+                <small id="settingsTailscale">Not detected</small>
+              </span>
+              <em>Private</em>
+            </button>
+            <button class="settings-row" type="button" data-view-target="access">
+              <span class="settings-icon" data-icon="access"></span>
+              <span>
+                <strong>Local URL</strong>
+                <small id="settingsLocalUrl">127.0.0.1</small>
+              </span>
+              <span class="settings-chevron">›</span>
+            </button>
+          </div>
+
+          <div class="settings-group">
+            <p class="settings-label">Preferences</p>
+            <button class="settings-row" type="button" id="themeToggleBtn">
+              <span class="settings-icon" data-icon="palette"></span>
+              <span>
+                <strong>Appearance</strong>
+                <small id="settingsThemeLabel">System · Dark</small>
+              </span>
+              <span class="settings-chevron">›</span>
+            </button>
+            <button class="settings-row" type="button" id="telegramFallbackBtn">
+              <span class="settings-icon" data-icon="telegram"></span>
+              <span>
+                <strong>Telegram fallback</strong>
+                <small>Optional alerts and emergency controls</small>
+              </span>
+              <span id="settingsTelegramSwitch" class="settings-switch" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div class="settings-group">
+            <p class="settings-label">Logs</p>
+            <div id="logsPanel" class="settings-detail logs-panel">
+              <div class="section-header">
+                <div>
+                  <strong>Latest Output <span id="logSessionLabel"></span></strong>
+                  <small>Session logs stay here in More.</small>
+                </div>
+                <button id="clearLogsBtn" class="ghost-button">Clear</button>
+              </div>
+              <pre id="logs" class="logs"></pre>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <p class="settings-label">Security</p>
+            <button class="settings-row" type="button" id="settingsTokenBtn">
+              <span class="settings-icon" data-icon="key"></span>
+              <span>
+                <strong>API Token</strong>
+                <small>Saved locally on this device</small>
+              </span>
+              <span class="settings-chevron">›</span>
+            </button>
+            <button class="settings-row" type="button" id="lockOnExitBtn">
+              <span class="settings-icon" data-icon="lock"></span>
+              <span>
+                <strong>Lock on exit</strong>
+                <small>Require auth to reopen</small>
+              </span>
+              <span id="settingsLockSwitch" class="settings-switch on" aria-hidden="true"></span>
+            </button>
+          </div>
         </section>
 
         <section id="accessPanel" class="panel access-panel tab-panel">
@@ -356,29 +518,20 @@
               <p class="eyebrow">Remote Access</p>
               <h2>Tailscale</h2>
             </div>
-            </div>
-            <div class="access-list">
-              <a id="localUrl" href="#">--</a>
-              <a id="tailscaleUrl" href="#">Not detected</a>
-            </div>
-            <div class="access-qr-card">
-              <div>
-                <p class="eyebrow">Android PWA</p>
-                <h3>Scan To Open KAEL OS</h3>
-                <a id="accessQrUrl" href="#" target="_blank" rel="noreferrer">Waiting for Tailscale...</a>
-              </div>
-              <div id="accessQrCode" class="phone-qr-code"></div>
-            </div>
-            <div id="services" class="services"></div>
-          </section>
+          </div>
+          <div class="access-list">
+            <a id="localUrl" href="#">--</a>
+            <a id="tailscaleUrl" href="#">Not detected</a>
+          </div>
+          <div id="services" class="services"></div>
+        </section>
       </section>
 
       <nav class="mobile-nav" aria-label="Mobile navigation">
         <button type="button" data-view="home" class="active"><span class="icon-slot" data-icon="home"></span><span>Home</span></button>
-        <button type="button" data-view="sessions"><span class="icon-slot" data-icon="sessions"></span><span>Sessions</span></button>
         <button type="button" data-view="chat"><span class="icon-slot" data-icon="terminal"></span><span>Terminal</span></button>
-        <button type="button" data-view="logs"><span class="icon-slot" data-icon="logs"></span><span>Logs</span></button>
-        <button type="button" data-view="profiles"><span class="icon-slot" data-icon="profiles"></span><span>More</span></button>
+        <button type="button" data-view="profiles"><span class="icon-slot" data-icon="profiles"></span><span>Profiles</span></button>
+        <button type="button" data-view="settings"><span class="icon-slot" data-icon="settings"></span><span>More</span></button>
       </nav>
     </main>
 

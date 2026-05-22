@@ -13,7 +13,8 @@
     "smoke": "powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1",
     "desktop:dev": "npm run build && electron dist/desktop/main.js",
     "desktop:build": "npm run build",
-    "desktop:dist": "npm run desktop:build && powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1"
+    "desktop:dist": "npm run desktop:build && powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1",
+    "screenshots": "node run-screenshots.js"
   },
   "engines": {
     "node": ">=20.11.0"
@@ -38,6 +39,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.5",

@@ -65,7 +65,7 @@ export function createApiRouter(sessionManager: SessionManager, profileStore: Pr
 
   router.get("/setup/status", (_req, res) => {
     res.json({
-      configured: Boolean(config.apiToken && config.telegram.token && config.telegram.allowedChatIds.length > 0 && config.telegram.streamChatId),
+      configured: Boolean(config.apiToken),
       apiTokenConfigured: Boolean(config.apiToken),
       telegramConfigured: Boolean(config.telegram.token),
       telegramChatConfigured: config.telegram.allowedChatIds.length > 0,

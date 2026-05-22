@@ -8,8 +8,8 @@ import type { WorkstationServerHandle } from "../backend/src/server.js";
 import { desktopBridge } from "../backend/src/desktopBridge.js";
 
 interface FirstRunConfig {
-  telegramBotToken: string;
-  telegramChatId: string;
+  telegramBotToken?: string;
+  telegramChatId?: string;
   port?: number;
   tailscalePath?: string;
 }
@@ -116,7 +116,7 @@ async function getSetupStatus(): Promise<SetupStatus> {
   const env = await readEnvFile();
   const port = Number(env.PORT || 8787);
   return {
-    configured: Boolean(env.API_TOKEN && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_ALLOWED_CHAT_IDS && env.TELEGRAM_STREAM_CHAT_ID),
+    configured: Boolean(env.API_TOKEN),
     apiToken: env.API_TOKEN,
     tailscalePath: env.TAILSCALE_COMMAND,
     configPath: configPath(),
@@ -137,17 +137,21 @@ function findStandardTailscalePath(): string | undefined {
 }
 
 function validateFirstRunConfig(payload: FirstRunConfig): Required<FirstRunConfig> {
-  const telegramBotToken = payload.telegramBotToken?.trim();
-  const telegramChatId = payload.telegramChatId?.trim();
+  const telegramBotToken = payload.telegramBotToken?.trim() || "";
+  const telegramChatId = payload.telegramChatId?.trim() || "";
   const tailscalePath = payload.tailscalePath?.trim() || "";
   const port = payload.port || 8787;
 
-  if (!telegramBotToken || telegramBotToken.length < 20 || !telegramBotToken.includes(":")) {
-    throw new Error("Telegram bot token is required and must look like 123456:ABC.");
+  if (telegramBotToken && (telegramBotToken.length < 20 || !telegramBotToken.includes(":"))) {
+    throw new Error("Telegram bot token must look like 123456:ABC.");
   }
 
-  if (!telegramChatId || !/^-?\d+$/.test(telegramChatId)) {
-    throw new Error("Telegram chat id is required and must be numeric.");
+  if (telegramChatId && !/^-?\d+$/.test(telegramChatId)) {
+    throw new Error("Telegram chat id must be numeric.");
+  }
+
+  if ((telegramBotToken && !telegramChatId) || (!telegramBotToken && telegramChatId)) {
+    throw new Error("Telegram is optional, but token and chat id must be provided together.");
   }
 
   if (!Number.isInteger(port) || port < 1024 || port > 65535) {

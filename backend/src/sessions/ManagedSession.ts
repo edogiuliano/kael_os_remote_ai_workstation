@@ -87,7 +87,12 @@ export class ManagedSession extends EventEmitter {
     }
 
     this.writeSystem(`> ${text}`);
-    if (this.snapshot.kind === "codex" || this.snapshot.kind === "claude") {
+    if (this.snapshot.kind === "codex") {
+      this.submitCodexPrompt(text);
+      return;
+    }
+
+    if (this.snapshot.kind === "claude") {
       this.submitAgentPrompt(text);
       return;
     }
@@ -187,10 +192,27 @@ export class ManagedSession extends EventEmitter {
     setTimeout(() => this.terminal?.write(text), 20).unref();
     setTimeout(() => this.terminal?.write("\r"), 80).unref();
   }
+
+  private submitCodexPrompt(text: string): void {
+    if (!this.terminal) return;
+    const sequence = buildCodexPromptInput(text);
+    this.terminal.write(sequence.clear);
+    setTimeout(() => this.terminal?.write(sequence.paste), 45).unref();
+    setTimeout(() => this.terminal?.write(sequence.submit), 130).unref();
+  }
 }
 
 export function isTerminalStatus(status: SessionStatus): boolean {
   return status === "stopped" || status === "exited" || status === "error";
+}
+
+export function buildCodexPromptInput(text: string): { clear: string; paste: string; submit: string } {
+  const prompt = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return {
+    clear: "\x15\x01\x0b",
+    paste: `\x1b[200~${prompt}\x1b[201~`,
+    submit: "\r"
+  };
 }
 
 function buildPtyEnv(extra: Record<string, string>): Record<string, string> {
