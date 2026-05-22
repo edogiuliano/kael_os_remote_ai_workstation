@@ -16,7 +16,7 @@ Generated files:
 - `screenshots/command-deck.png`
 - `screenshots/profiles-light.png`
 - `screenshots/chat-terminal.png`
-- `screenshots/phone-more.png`
+- `screenshots/phone-more.jpeg`
 
 The default screenshot server port is `8878`. Override it when that port is busy:
 

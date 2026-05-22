@@ -30,7 +30,7 @@ It is built for the kind of workstation that stays on: Codex CLI, Claude Code, l
 
 | Mobile More |
 | --- |
-| ![Mobile More view](screenshots/phone-more.png) |
+| ![Mobile More view](screenshots/phone-more.jpeg) |
 
 ## What Changed Recently
 

@@ -218,7 +218,7 @@ async function main() {
     await setView(phone, "settings");
     await phone.click("#settingsQrBtn");
     await phone.waitForTimeout(900);
-    await capture(phone, "phone-more.png", { fullPage: true });
+    await capture(phone, "phone-more.jpeg", { fullPage: true });
     await phone.close();
 
     await browser.close();
