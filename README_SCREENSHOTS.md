@@ -1,46 +1,32 @@
-# Kael OS Screenshot Automation
+# KAEL OS Screenshot Automation
 
-This script automatically takes screenshots of the main views in the Kael OS Electron app.
+`npm run screenshots` regenerates the public README screenshots with safe demo data.
 
-## Prerequisites
-
-Make sure you have the required dependencies installed:
-```bash
-npm install
-```
-
-## Installation
-
-The required dependencies should already be installed as part of the main `package.json`. Playwright is already included in your devDependencies.
+The script starts a temporary KAEL OS dev server, mocks the API responses used by the UI, captures the main views with Playwright, and shuts the server down again. It is meant for documentation images, not end-to-end testing against private local profiles.
 
 ## Usage
 
-To run the screenshot automation:
-
-```bash
+```powershell
 npm run screenshots
 ```
 
-This will generate screenshots for:
-- `dashboard.png` - Main dashboard view
-- `workflow.png` - Workflow/session panel view  
-- `result-view.png` - Session with terminal output visible
-- `setup-screen.png` - Setup or config screen
+Generated files:
 
-## How it works
+- `screenshots/dashboard.png`
+- `screenshots/command-deck.png`
+- `screenshots/profiles-light.png`
+- `screenshots/chat-terminal.png`
+- `screenshots/phone-more.png`
 
-The script will:
-1. Launch the Electron app using the configured API token from .env
-2. Navigate to different views in the app
-3. Take a screenshot of each main view
-4. Save the screenshots to the `screenshots/` directory
+The default screenshot server port is `8878`. Override it when that port is busy:
 
-## Customization
-
-You can modify the script by editing the `screenshot-script.js` file.
+```powershell
+$env:SCREENSHOT_PORT=8890
+npm run screenshots
+```
 
 ## Notes
 
-- The script uses Playwright's Electron support to launch the app
-- All main views will be captured including the dashboard, workflow, and setup screens
-- Screenshots are saved as PNG files in the `screenshots/` directory
+- The captured profiles, logs, URLs, and tokens are demo values.
+- The script uses Chrome when it is installed, otherwise it falls back to Playwright Chromium.
+- The screenshots are intentionally committed because the README depends on them.

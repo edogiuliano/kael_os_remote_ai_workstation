@@ -2340,7 +2340,8 @@ body[data-theme="cream"] .header-actions button,
 body[data-theme="cream"] .chat-actions button:not(.danger-action),
 body[data-theme="cream"] .auth-panel button,
 body[data-theme="cream"] .ghost-button,
-body[data-theme="cream"] .button-link {
+body[data-theme="cream"] .button-link,
+body[data-theme="cream"] .profile-header-actions .icon-button {
   border-color: rgba(75, 50, 27, 0.18);
   background: rgba(255, 248, 235, 0.78);
   color: var(--text);
@@ -2348,7 +2349,8 @@ body[data-theme="cream"] .button-link {
 
 body[data-theme="cream"] #refreshBtn:hover,
 body[data-theme="cream"] .chat-actions button:not(.danger-action):hover,
-body[data-theme="cream"] .ghost-button:hover {
+body[data-theme="cream"] .ghost-button:hover,
+body[data-theme="cream"] .profile-header-actions .icon-button:hover {
   border-color: rgba(244, 119, 29, 0.42);
   background: rgba(255, 241, 215, 0.94);
 }
