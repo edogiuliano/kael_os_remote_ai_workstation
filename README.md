@@ -118,7 +118,7 @@ npm run typecheck     # Run TypeScript checks
 npm run build         # Compile backend and desktop entrypoints
 npm run start         # Run the compiled backend
 npm run smoke         # Verify the core API/session flow
-npm run screenshots   # Regenerate README screenshots with safe demo data
+npm run screenshots   # Regenerate README screenshots
 npm run desktop:dev   # Build and open the Electron app
 npm run desktop:dist  # Build the Windows installer
 ```
@@ -155,30 +155,15 @@ Never commit `.env`. The Electron app stores first-run config under the user's a
 
 The QR URL includes the local API token in the URL hash so the phone can authenticate without exposing the token to server logs.
 
-## Regenerating Screenshots
+## Secure By Design
 
-The README screenshots are generated with safe demo data. They do not expose real project paths, tokens, session logs, or private profiles.
+KAEL OS is designed for private workstation control, not public exposure. The dashboard is protected by an API token, phone access is intended to run through Tailscale, and QR authentication keeps the token in the URL hash so it does not land in server logs.
 
-```powershell
-npm run screenshots
-```
+Sensitive configuration stays local: `.env` is ignored, Electron stores first-run config in the user's app data directory, and profile environment values are kept on the PC. Telegram support is optional and can be restricted to explicit allowed chat IDs.
 
-The script starts a temporary dev server on port `8878` by default. Override it if needed:
+Because agent prompts can trigger local tools, KAEL OS treats remote access as real workstation access. It works best behind a private network, with dedicated project folders and credentials kept out of the repository.
 
-```powershell
-$env:SCREENSHOT_PORT=8890
-npm run screenshots
-```
-
-## Security Notes
-
-- Use Tailscale or another private network. Do not expose KAEL OS directly to the public internet.
-- Keep `API_TOKEN`, Telegram tokens, and profile secrets private.
-- Restrict Telegram access with `TELEGRAM_ALLOWED_CHAT_IDS` if Telegram is enabled.
-- Treat remote prompts as remote command capability because agents can run tools.
-- Use dedicated project folders for agent work.
-
-## Portfolio Notes
+## Built To Show
 
 KAEL OS demonstrates:
 
@@ -203,7 +188,7 @@ KAEL OS demonstrates:
 
 ## Repository Hygiene
 
-The repo should include source code, docs, and safe screenshots only. It should not include:
+The repo should include source code, docs, and product screenshots only. It should not include:
 
 - `.env` files
 - tokens or API keys
