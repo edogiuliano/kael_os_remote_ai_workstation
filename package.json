@@ -13,8 +13,7 @@
     "smoke": "powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1",
     "desktop:dev": "npm run build && electron dist/desktop/main.js",
     "desktop:build": "npm run build",
-    "desktop:dist": "npm run desktop:build && powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1",
-    "screenshots": "node run-screenshots.js"
+    "desktop:dist": "npm run desktop:build && powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1"
   },
   "engines": {
     "node": ">=20.11.0"

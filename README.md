@@ -70,7 +70,6 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Desktop:** Electron, electron-builder
 - **Frontend:** HTML, CSS, JavaScript, xterm.js
 - **Integrations:** Tailscale CLI detection, Telegram via Telegraf, NVIDIA metrics
-- **Automation:** Playwright for polished screenshot generation
 
 ## Requirements
 
@@ -118,7 +117,6 @@ npm run typecheck     # Run TypeScript checks
 npm run build         # Compile backend and desktop entrypoints
 npm run start         # Run the compiled backend
 npm run smoke         # Verify the core API/session flow
-npm run screenshots   # Regenerate README screenshots
 npm run desktop:dev   # Build and open the Electron app
 npm run desktop:dist  # Build the Windows installer
 ```
