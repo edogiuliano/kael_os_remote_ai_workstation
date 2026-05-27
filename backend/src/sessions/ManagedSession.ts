@@ -198,7 +198,7 @@ export class ManagedSession extends EventEmitter {
     const sequence = buildCodexPromptInput(text);
     this.terminal.write(sequence.clear);
     setTimeout(() => this.terminal?.write(sequence.paste), 45).unref();
-    setTimeout(() => this.terminal?.write(sequence.submit), 130).unref();
+    setTimeout(() => this.terminal?.write(sequence.submit), 280).unref();
   }
 }
 

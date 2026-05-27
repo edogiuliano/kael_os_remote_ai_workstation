@@ -310,6 +310,20 @@
             <div id="phoneQrCode" class="phone-qr-code" aria-label="Phone access QR"></div>
           </div>
 
+          <div id="approvalPanel" class="approval-panel" hidden>
+            <div>
+              <p class="eyebrow">Agent Approval</p>
+              <h3 id="approvalTitle">Approval requested</h3>
+              <p id="approvalMessage">The agent is waiting for a permission choice.</p>
+            </div>
+            <textarea id="approvalInstruction" rows="2" placeholder="If denying, tell the agent what to do instead"></textarea>
+            <div class="approval-actions">
+              <button id="approvalYesBtn" type="button" class="primary-action">1. Yes</button>
+              <button id="approvalAlwaysBtn" type="button">2. Yes always</button>
+              <button id="approvalNoBtn" type="button" class="danger-action">3. No</button>
+            </div>
+          </div>
+
           <div class="agent-terminal-wrap">
             <div id="chatTerminalHost" class="embedded-terminal" aria-label="Agent terminal"></div>
             <div id="chatTerminalEmpty" class="terminal-empty">

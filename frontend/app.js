@@ -29,6 +29,10 @@ const state = {
   pendingAttachments: [],
   editingProfileId: "",
   profileFormMode: "",
+  approvalBySession: {},
+  dismissedApprovalBySession: {},
+  dismissedApprovalCursorBySession: {},
+  outputTextBySession: {},
   theme: localStorage.getItem("kael-theme") || "dark"
 };
 
@@ -183,7 +187,14 @@ const el = {
   telegramFallbackBtn: document.getElementById("telegramFallbackBtn"),
   lockOnExitBtn: document.getElementById("lockOnExitBtn"),
   settingsTelegramSwitch: document.getElementById("settingsTelegramSwitch"),
-  settingsLockSwitch: document.getElementById("settingsLockSwitch")
+  settingsLockSwitch: document.getElementById("settingsLockSwitch"),
+  approvalPanel: document.getElementById("approvalPanel"),
+  approvalTitle: document.getElementById("approvalTitle"),
+  approvalMessage: document.getElementById("approvalMessage"),
+  approvalInstruction: document.getElementById("approvalInstruction"),
+  approvalYesBtn: document.getElementById("approvalYesBtn"),
+  approvalAlwaysBtn: document.getElementById("approvalAlwaysBtn"),
+  approvalNoBtn: document.getElementById("approvalNoBtn")
 };
 
 el.tokenInput.value = state.token;
@@ -817,8 +828,10 @@ async function connectChatTerminal(sessionId) {
   try {
     const logs = await api(`/api/sessions/${sessionId}/logs`, { headers: { Accept: "text/plain" } });
     if (state.terminalSessionId === sessionId && logs) {
-      term.write(logFileToTerminal(logs));
-      fitChatTerminal();
+      term.write(logFileToTerminal(logs), () => {
+        scrollTerminalToBottom();
+        fitChatTerminal();
+      });
     }
   } catch (error) {
     term.writeln(`\r\n\x1b[31m[logs] ${cleanError(error)}\x1b[0m`);
@@ -910,6 +923,7 @@ function scheduleFitChatTerminal() {
 function fitChatTerminal() {
   if (!state.terminal || !state.terminalFit || !el.chatTerminalHost || el.chatTerminalHost.offsetParent === null) return;
   try {
+    const shouldFollow = isTerminalNearBottom(state.terminal);
     state.terminalFit.fit();
     const cols = clampNumber(state.terminal.cols, 20, 300);
     const rows = clampNumber(state.terminal.rows, 5, 120);
@@ -919,6 +933,7 @@ function fitChatTerminal() {
 
     const id = state.activeChatSessionId || state.terminalSessionId;
     if (!id) return;
+    if (shouldFollow) state.terminal.scrollToBottom();
     const nextSize = `${id}:${cols}x${rows}`;
     if (state.terminalLastSize === nextSize) return;
     state.terminalLastSize = nextSize;
@@ -950,7 +965,102 @@ function writeChatTerminal(sessionId, chunk) {
   if (!chunk || sessionId !== state.terminalSessionId) return;
   const term = ensureChatTerminal();
   if (!term) return;
-  term.write(chunk);
+  const shouldFollow = isTerminalNearBottom(term);
+  term.write(chunk, () => {
+    if (shouldFollow) term.scrollToBottom();
+  });
+}
+
+function isTerminalNearBottom(term = state.terminal) {
+  if (!term?.buffer?.active) return true;
+  const buffer = term.buffer.active;
+  return buffer.baseY - buffer.viewportY <= 2;
+}
+
+function scrollTerminalToBottom() {
+  state.terminal?.scrollToBottom();
+}
+
+function refitChatTerminalSoon() {
+  scheduleFitChatTerminal();
+  window.setTimeout(scheduleFitChatTerminal, 140);
+}
+
+function observeApprovalPrompt(sessionId, chunk) {
+  const session = state.sessions.find((item) => item.id === sessionId);
+  if (!session || !["codex", "claude"].includes(session.kind)) return;
+  const clean = cleanTerminalText(chunk);
+  if (!clean.trim()) return;
+  const previous = state.outputTextBySession[sessionId] || "";
+  const next = compactChatText(`${previous}${clean}`).slice(-5000);
+  state.outputTextBySession[sessionId] = next;
+  const approval = detectApprovalRequest(next, session);
+  if (!approval) return;
+  const existing = state.approvalBySession[sessionId];
+  if (existing?.signature === approval.signature) return;
+  if (state.dismissedApprovalBySession[sessionId] === approval.signature) return;
+  const dismissedCursor = state.dismissedApprovalCursorBySession[sessionId] || 0;
+  if (dismissedCursor && approval.markerIndex < dismissedCursor) return;
+  state.approvalBySession[sessionId] = approval;
+  showApprovalPanel(approval);
+}
+
+function detectApprovalRequest(text, session) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length < 20) return null;
+  const lower = compact.toLowerCase();
+  const markerIndex = Math.max(
+    lower.lastIndexOf("do you trust"),
+    lower.lastIndexOf("trusting the directory"),
+    lower.lastIndexOf("do you want"),
+    lower.lastIndexOf("would you like"),
+    lower.lastIndexOf("permission"),
+    lower.lastIndexOf("approve"),
+    lower.lastIndexOf("allow")
+  );
+  const hasNumberedChoices = /1\.\s*(yes|si|sí|continue|approve)/i.test(compact) && /2\.\s*(yes|si|sí|always|all|allow)/i.test(compact);
+  const hasDenyChoice = /3\.\s*(no|deny|reject)/i.test(compact) || /\bno,\s*(and|tell|instead|quit)/i.test(compact);
+  const codexTrust = /do you trust|trusting the directory|approve|allow|continue/i.test(compact) && /1\.\s*yes|2\.\s*no/i.test(compact);
+  const claudePermission = /permission|approve|allow|do you want|would you like|yes.*always|no.*tell/i.test(compact);
+  if (!hasNumberedChoices && !codexTrust && !(session.kind === "claude" && claudePermission && hasDenyChoice)) return null;
+  return {
+    sessionId: session.id,
+    kind: session.kind,
+    title: `${agentLabel(session.kind)} approval`,
+    message: session.kind === "codex" ? "Codex is waiting for a numbered approval choice." : "Claude is waiting for a tool permission choice.",
+    markerIndex: Math.max(0, markerIndex),
+    signature: `${session.id}:${compact.slice(-700)}`
+  };
+}
+
+function showApprovalPanel(approval) {
+  if (!el.approvalPanel) return;
+  el.approvalPanel.hidden = false;
+  el.approvalPanel.dataset.sessionId = approval.sessionId;
+  el.approvalTitle.textContent = approval.title;
+  el.approvalMessage.textContent = approval.message;
+  el.approvalInstruction.value = "";
+  refitChatTerminalSoon();
+  showToast("Agent approval requested.");
+}
+
+async function respondToApproval(choice) {
+  const sessionId = el.approvalPanel?.dataset.sessionId;
+  if (!sessionId) return;
+  const instruction = el.approvalInstruction?.value.trim() || "";
+  let data = `${choice}\r`;
+  if (choice === "3" && instruction) data += `${instruction}\r`;
+  await api(`/api/sessions/${sessionId}/raw-input`, {
+    method: "POST",
+    body: JSON.stringify({ data })
+  });
+  const approval = state.approvalBySession[sessionId];
+  if (approval?.signature) state.dismissedApprovalBySession[sessionId] = approval.signature;
+  state.dismissedApprovalCursorBySession[sessionId] = state.outputTextBySession[sessionId]?.length || 0;
+  delete state.approvalBySession[sessionId];
+  if (el.approvalPanel) el.approvalPanel.hidden = true;
+  refitChatTerminalSoon();
+  showToast(choice === "3" ? "Denied and sent guidance." : "Approval sent.");
 }
 
 function logFileToTerminal(logs) {
@@ -1358,6 +1468,7 @@ function connectWebSocket() {
     const message = JSON.parse(event.data);
     if (message.type === "session.output") {
       appendLog(`[${message.sessionId.slice(0, 8)}] ${message.chunk}`);
+      observeApprovalPrompt(message.sessionId, message.chunk);
       writeChatTerminal(message.sessionId, message.chunk);
     }
     if (message.type === "session.status") {
@@ -1605,6 +1716,9 @@ el.saveTokenBtn.addEventListener("click", () => {
 el.sendBtn.addEventListener("click", () => sendInput().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
 el.openWindowBtn.addEventListener("click", () => openWindow().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
 el.chatSendBtn.addEventListener("click", () => sendChatInput().catch((error) => showToast(cleanError(error), "error")));
+el.approvalYesBtn?.addEventListener("click", () => respondToApproval("1").catch((error) => showToast(cleanError(error), "error")));
+el.approvalAlwaysBtn?.addEventListener("click", () => respondToApproval("2").catch((error) => showToast(cleanError(error), "error")));
+el.approvalNoBtn?.addEventListener("click", () => respondToApproval("3").catch((error) => showToast(cleanError(error), "error")));
 el.chatPromptInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
