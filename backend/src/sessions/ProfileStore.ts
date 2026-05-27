@@ -42,6 +42,7 @@ export class ProfileStore {
       kind: input.kind,
       cwd: input.cwd || process.cwd(),
       command: input.command,
+      prelaunchCommand: input.prelaunchCommand,
       args: input.args ?? [],
       env: input.env ?? {},
       createdAt: now,
@@ -61,6 +62,7 @@ export class ProfileStore {
       kind: input.kind,
       cwd: input.cwd || process.cwd(),
       command: input.command,
+      prelaunchCommand: input.prelaunchCommand,
       args: input.args ?? [],
       env: input.env ?? {},
       updatedAt: new Date().toISOString()
@@ -108,6 +110,7 @@ function normalizeProfile(profile: AgentProfile): AgentProfile {
     name,
     cwd: path.resolve(profile.cwd || process.cwd()),
     command: profile.command?.trim() || undefined,
+    prelaunchCommand: profile.prelaunchCommand?.trim() || undefined,
     args: profile.args ?? [],
     env: profile.env ?? {}
   };

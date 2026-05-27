@@ -13,7 +13,8 @@ It is built for the kind of workstation that stays on: Codex CLI, Claude Code, l
 - Keep PTY-backed terminal sessions alive while switching between desktop and phone.
 - Send prompts from the dashboard or the terminal composer without focusing the raw terminal.
 - Attach image and text files from the chat composer.
-- Manage profiles with project folders, command overrides, and local environment variables.
+- Manage profiles with project folders, command overrides, prelaunch proxy commands, local environment variables, and Explorer folder shortcuts.
+- Handle Codex and Claude approval prompts from the phone with Yes, Yes always, or No with guidance.
 - Open private access from Tailscale or local URLs, with QR access tucked into More.
 - Track PC health with compact CPU, RAM, GPU, and service status panels.
 - Run as a Windows Electron app or as a local web dashboard.
@@ -43,6 +44,7 @@ The latest UI pass focuses on clarity:
 - The profile editor opens inline below the selected profile.
 - The Save button is compact, and create-profile is a simple plus action.
 - Logs live in More, while the main dashboard stays focused on active work.
+- Profiles can start a helper CMD first, which is useful for local Claude-compatible proxy servers.
 
 ## Architecture
 
@@ -114,6 +116,7 @@ For a fuller Windows setup guide, see [docs/SETUP.md](docs/SETUP.md).
 ```powershell
 npm run dev           # Run the TypeScript backend in development
 npm run typecheck     # Run TypeScript checks
+npm test              # Run focused Node tests
 npm run build         # Compile backend and desktop entrypoints
 npm run start         # Run the compiled backend
 npm run smoke         # Verify the core API/session flow
@@ -142,6 +145,31 @@ TELEGRAM_STREAM_CHAT_ID=
 ```
 
 Never commit `.env`. The Electron app stores first-run config under the user's app data directory instead of the installed program folder.
+
+## Profiles And Proxy Commands
+
+Profiles define how each agent starts:
+
+- `Project folder`: the repo or workspace the agent should control.
+- `Command override`: optional executable, such as a custom `claude` or `codex` path.
+- `Prelaunch command`: optional helper command that opens first in a separate Windows CMD window.
+- `Environment`: local `KEY=value` settings for that profile.
+
+For Claude-compatible local proxy workflows, use the `Use Claude proxy preset` button in the profile editor. It fills:
+
+```env
+ANTHROPIC_AUTH_TOKEN=freecc
+ANTHROPIC_BASE_URL=http://localhost:8082
+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+```
+
+and sets the prelaunch command:
+
+```powershell
+uv run uvicorn server:app --host 0.0.0.0 --port 8082
+```
+
+Use the profile `Folder` action to open that workspace in Windows Explorer.
 
 ## Phone Access
 

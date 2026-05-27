@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { createWriteStream, type WriteStream } from "node:fs";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import * as pty from "@lydell/node-pty";
 import type { LaunchSpec } from "./CommandCatalog.js";
 import type { SessionOutputEvent, SessionSnapshot, SessionStatus } from "../types.js";
@@ -27,6 +27,7 @@ export class ManagedSession extends EventEmitter {
       kind: launch.kind,
       name: launch.name,
       command: launch.command,
+      prelaunchCommand: launch.prelaunchCommand,
       args: launch.args,
       cwd: launch.cwd,
       status: "starting",
@@ -41,6 +42,10 @@ export class ManagedSession extends EventEmitter {
   }
 
   start(): SessionSnapshot {
+    if (this.launch.prelaunchCommand) {
+      this.startPrelaunchCommand(this.launch.prelaunchCommand);
+    }
+
     this.writeSystem(`Starting ${this.launch.command} ${this.launch.args.join(" ")}`.trim());
     try {
       this.terminal = pty.spawn(this.launch.command, this.launch.args, {
@@ -199,6 +204,36 @@ export class ManagedSession extends EventEmitter {
     this.terminal.write(sequence.clear);
     setTimeout(() => this.terminal?.write(sequence.paste), 45).unref();
     setTimeout(() => this.terminal?.write(sequence.submit), 280).unref();
+  }
+
+  private startPrelaunchCommand(command: string): void {
+    this.writeSystem(`Prelaunch command: ${command}`);
+    try {
+      const env = buildPtyEnv(this.launch.env);
+      if (process.platform === "win32") {
+        const child = spawn("cmd.exe", ["/d", "/c", "start", `KAEL Proxy - ${this.launch.name}`, "cmd.exe", "/k", command], {
+          cwd: this.launch.cwd,
+          env,
+          detached: true,
+          stdio: "ignore",
+          windowsHide: false
+        });
+        child.unref();
+        return;
+      }
+
+      const child = spawn(command, {
+        cwd: this.launch.cwd,
+        env,
+        detached: true,
+        shell: true,
+        stdio: "ignore"
+      });
+      child.unref();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.writeSystem(`Prelaunch command failed: ${message}`);
+    }
   }
 }
 

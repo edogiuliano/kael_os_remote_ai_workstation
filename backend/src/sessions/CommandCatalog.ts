@@ -8,6 +8,7 @@ export interface LaunchSpec {
   kind: AgentKind;
   name: string;
   command: string;
+  prelaunchCommand?: string;
   args: string[];
   cwd: string;
   env: Record<string, string>;
@@ -29,6 +30,7 @@ export function resolveLaunchSpec(request: SessionCreateRequest): LaunchSpec {
       kind: "custom",
       name: request.name || request.command,
       command: request.command,
+      prelaunchCommand: request.prelaunchCommand,
       args: request.args ?? [],
       cwd,
       env,
@@ -43,6 +45,7 @@ export function resolveLaunchSpec(request: SessionCreateRequest): LaunchSpec {
       kind: "powershell",
       name: request.name || "PowerShell",
       command: config.commands.powershell,
+      prelaunchCommand: request.prelaunchCommand,
       args: request.args ?? ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass"],
       cwd,
       env,
@@ -57,6 +60,7 @@ export function resolveLaunchSpec(request: SessionCreateRequest): LaunchSpec {
       kind: "codex",
       name: request.name || "Codex CLI",
       command: resolveCommand(request.command || config.commands.codex, "codex"),
+      prelaunchCommand: request.prelaunchCommand,
       args: request.args ?? [],
       cwd,
       env,
@@ -70,6 +74,7 @@ export function resolveLaunchSpec(request: SessionCreateRequest): LaunchSpec {
     kind: "claude",
     name: request.name || "Claude Code",
     command: resolveCommand(request.command || config.commands.claude, "claude"),
+    prelaunchCommand: request.prelaunchCommand,
     args: request.args ?? [],
     cwd,
     env,

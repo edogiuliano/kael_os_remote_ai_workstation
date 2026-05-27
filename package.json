@@ -9,6 +9,7 @@
     "dev": "tsx backend/src/server.ts",
     "build": "tsc -p tsconfig.json && powershell -ExecutionPolicy Bypass -File scripts/copy-desktop-assets.ps1",
     "start": "node dist/backend/src/server.js",
+    "test": "node --import tsx --test backend/tests/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke": "powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1",
     "desktop:dev": "npm run build && electron dist/desktop/main.js",

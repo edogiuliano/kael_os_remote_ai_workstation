@@ -394,6 +394,14 @@
                 <small>Leave empty unless this profile needs a custom executable or proxy command.</small>
               </label>
               <label class="field full">
+                <span>Prelaunch command</span>
+                <input id="profilePrelaunchCommand" placeholder="Optional, e.g. uv run uvicorn server:app --host 0.0.0.0 --port 8082" autocomplete="off" />
+                <small>Runs first in a separate Windows CMD window. Use it for local proxy servers.</small>
+              </label>
+              <div class="field full preset-actions">
+                <button id="claudeProxyPresetBtn" type="button" class="ghost-button"><span class="icon-slot" data-icon="claude"></span><span>Use Claude proxy preset</span></button>
+              </div>
+              <label class="field full">
                 <span>Environment</span>
                 <textarea id="profileEnv" rows="3" placeholder="OPENAI_BASE_URL=http://127.0.0.1:11434/v1&#10;MODEL_ROUTER=local"></textarea>
                 <small>One KEY=value per line. Secrets are stored locally on this PC.</small>

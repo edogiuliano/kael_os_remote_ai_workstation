@@ -171,7 +171,9 @@ const el = {
   profileKind: document.getElementById("profileKind"),
   profileCwd: document.getElementById("profileCwd"),
   profileCommand: document.getElementById("profileCommand"),
+  profilePrelaunchCommand: document.getElementById("profilePrelaunchCommand"),
   profileEnv: document.getElementById("profileEnv"),
+  claudeProxyPresetBtn: document.getElementById("claudeProxyPresetBtn"),
   saveProfileBtn: document.getElementById("saveProfileBtn"),
   cancelProfileEditBtn: document.getElementById("cancelProfileEditBtn"),
   settingsPanel: document.getElementById("settingsPanel"),
@@ -606,20 +608,21 @@ function renderProfiles() {
     const active = activeSessionForProfile(profile.id);
     const item = document.createElement("article");
     item.className = `profile-item profile-card profile-${profile.kind}`;
+    const prelaunchLabel = profile.prelaunchCommand ? " · prelaunch" : "";
     item.innerHTML = `
       <div class="profile-identity">
         <span class="profile-agent-icon">${iconSvg(iconForKind(profile.kind))}</span>
         <div>
           <strong>${escapeHtml(profile.name)}</strong>
           <span>${escapeHtml(agentLabel(profile.kind))} · ${escapeHtml(compactPath(profile.cwd) || "Default folder")}</span>
-          <span class="profile-meta">${profile.command ? `Command: ${escapeHtml(profile.command)}` : "Default command"} · ${envCount} env value${envCount === 1 ? "" : "s"}${active ? " · running" : ""}</span>
+          <span class="profile-meta">${profile.command ? `Command: ${escapeHtml(profile.command)}` : "Default command"} · ${envCount} env value${envCount === 1 ? "" : "s"}${prelaunchLabel}${active ? " · running" : ""}</span>
         </div>
         <em class="profile-state ${active ? "running" : ""}">${active ? "Running" : "Ready"}</em>
       </div>
       <div class="profile-actions">
         <button data-action="start-profile" data-id="${profile.id}">${state.loadingProfileId === profile.id ? "Starting" : "Start"}</button>
         <button data-action="edit-profile" data-id="${profile.id}">Edit</button>
-        <button data-action="open-profile-folder" data-id="${profile.id}">Open</button>
+        <button data-action="open-profile-folder" data-id="${profile.id}">Folder</button>
         <button data-action="delete-profile" data-id="${profile.id}">Delete</button>
       </div>
     `;
@@ -697,6 +700,7 @@ function editProfile(id) {
   el.profileKind.value = profile.kind || "custom";
   el.profileCwd.value = profile.cwd || "";
   el.profileCommand.value = profile.command || "";
+  el.profilePrelaunchCommand.value = profile.prelaunchCommand || "";
   el.profileEnv.value = Object.entries(profile.env || {}).map(([key, value]) => `${key}=${value}`).join("\n");
   el.saveProfileBtn.innerHTML = `${iconSvg("approve")}<span>Save</span>`;
   renderProfiles();
@@ -708,12 +712,29 @@ function resetProfileForm() {
   state.profileFormMode = "";
   el.profileName.value = "";
   el.profileCommand.value = "";
+  el.profilePrelaunchCommand.value = "";
   el.profileEnv.value = "";
   el.profileFormWrap.hidden = true;
   el.profileCreateSlot?.appendChild(el.profileFormWrap);
   el.createProfileBtn?.classList.remove("active");
   el.saveProfileBtn.innerHTML = `${iconSvg("approve")}<span>Save</span>`;
   renderProfiles();
+}
+
+function applyClaudeProxyPreset() {
+  el.profileKind.value = "claude";
+  if (!el.profileName.value.trim()) el.profileName.value = "Claude - Local proxy";
+  el.profileCommand.value = el.profileCommand.value.trim() || "claude";
+  el.profilePrelaunchCommand.value = "uv run uvicorn server:app --host 0.0.0.0 --port 8082";
+  const current = parseEnv(el.profileEnv.value);
+  const merged = {
+    ...current,
+    ANTHROPIC_AUTH_TOKEN: current.ANTHROPIC_AUTH_TOKEN || "freecc",
+    ANTHROPIC_BASE_URL: current.ANTHROPIC_BASE_URL || "http://localhost:8082",
+    CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: current.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY || "1"
+  };
+  el.profileEnv.value = Object.entries(merged).map(([key, value]) => `${key}=${value}`).join("\n");
+  showToast("Claude proxy preset added. Check the project folder before saving.");
 }
 
 function beginCreateProfile() {
@@ -1247,6 +1268,7 @@ async function sendChatInput() {
     el.chatPromptInput.value = "";
     clearAttachments();
     fitChatTerminal();
+    scrollTerminalToBottom();
   } catch (error) {
     state.terminal?.writeln(`\r\n\x1b[31m[send] ${cleanError(error)}\x1b[0m`);
     throw error;
@@ -1420,6 +1442,7 @@ async function createProfile() {
     kind: el.profileKind.value,
     cwd: el.profileCwd.value.trim() || undefined,
     command: el.profileCommand.value.trim() || undefined,
+    prelaunchCommand: el.profilePrelaunchCommand.value.trim() || undefined,
     env: parseEnv(el.profileEnv.value)
   };
   if (!payload.name) {
@@ -1657,12 +1680,9 @@ el.profiles.addEventListener("click", (event) => {
   if (button.dataset.action === "start-profile") startProfile(id).catch((error) => showToast(cleanError(error), "error"));
   if (button.dataset.action === "edit-profile") editProfile(id);
   if (button.dataset.action === "open-profile-folder") {
-    const session = activeSessionForProfile(id);
-    if (!session) {
-      showToast("Start this profile first, then Open will focus its terminal window.");
-      return;
-    }
-    openWindow(session.id).catch((error) => showToast(cleanError(error), "error"));
+    api(`/api/profiles/${id}/open-folder`, { method: "POST" })
+      .then(() => showToast("Opened profile folder in Explorer."))
+      .catch((error) => showToast(cleanError(error), "error"));
   }
   if (button.dataset.action === "delete-profile") {
     api(`/api/profiles/${id}`, { method: "DELETE" })
@@ -1771,6 +1791,7 @@ el.profileFormToggle?.addEventListener("click", () => {
 el.cancelProfileEditBtn?.addEventListener("click", resetProfileForm);
 el.createProfileBtn.addEventListener("click", beginCreateProfile);
 el.saveProfileBtn?.addEventListener("click", () => createProfile().catch((error) => appendLog(`[error] ${cleanError(error)}\n`)));
+el.claudeProxyPresetBtn?.addEventListener("click", applyClaudeProxyPreset);
 el.themeToggleBtn?.addEventListener("click", () => {
   applyTheme(state.theme === "cream" ? "dark" : "cream");
   showToast(state.theme === "cream" ? "Cream theme enabled." : "Dark theme enabled.");

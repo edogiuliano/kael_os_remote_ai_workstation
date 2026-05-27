@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { readFile, access } from "node:fs/promises";
 import { z } from "zod";
 import QRCode from "qrcode";
 import type { RuntimePaths } from "../runtime/paths.js";
@@ -20,6 +21,7 @@ const CreateSessionSchema = z.object({
   name: z.string().min(1).optional(),
   cwd: z.string().min(1).optional(),
   command: z.string().min(1).optional(),
+  prelaunchCommand: z.string().min(1).optional(),
   args: z.array(z.string()).optional(),
   prompt: z.string().optional(),
   env: z.record(z.string()).optional(),
@@ -46,6 +48,7 @@ const ProfileSchema = z.object({
   kind: z.enum(["powershell", "codex", "claude", "custom"]),
   cwd: z.string().min(1).optional(),
   command: z.string().min(1).optional(),
+  prelaunchCommand: z.string().min(1).optional(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional()
 });
@@ -128,6 +131,7 @@ export function createApiRouter(sessionManager: SessionManager, profileStore: Pr
         name: profile.name,
         cwd: profile.cwd,
         command: profile.command,
+        prelaunchCommand: profile.prelaunchCommand,
         args: profile.args,
         env: mergeProfileEnv(profile),
         prompt: body.prompt,
@@ -283,6 +287,17 @@ export function createApiRouter(sessionManager: SessionManager, profileStore: Pr
     }
   });
 
+  router.post("/profiles/:id/open-folder", async (req, res, next) => {
+    try {
+      const profile = profileStore.get(req.params.id);
+      if (!profile) throw new Error(`Profile ${req.params.id} was not found.`);
+      await openFolderInExplorer(profile.cwd);
+      res.json({ ok: true, path: profile.cwd });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.delete("/profiles/:id", async (req, res, next) => {
     try {
       await profileStore.delete(req.params.id);
@@ -293,6 +308,19 @@ export function createApiRouter(sessionManager: SessionManager, profileStore: Pr
   });
 
   return router;
+}
+
+async function openFolderInExplorer(folder: string): Promise<void> {
+  await access(folder);
+  if (process.platform !== "win32") {
+    throw new Error("Opening folders from KAEL OS is currently supported on Windows only.");
+  }
+  await new Promise<void>((resolve, reject) => {
+    execFile("explorer.exe", [folder], { windowsHide: false }, (error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 
 function appendFragmentToken(url: string): string {

@@ -52,10 +52,11 @@ Profiles are reusable launch configurations. A profile can define:
 - Agent type.
 - Working directory.
 - Optional command override.
+- Optional prelaunch command for helper processes such as local model proxies.
 - Optional arguments.
 - Environment variables.
 
-This makes it possible to keep separate launchers for different repositories or proxy setups without hardcoding credentials in source code.
+This makes it possible to keep separate launchers for different repositories or proxy setups without hardcoding credentials in source code. When a prelaunch command is set, KAEL OS opens it in a separate Windows CMD window before starting the agent PTY.
 
 ## Telegram
 

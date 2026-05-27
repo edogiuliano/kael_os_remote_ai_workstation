@@ -7,6 +7,7 @@ export interface SessionCreateRequest {
   name?: string;
   cwd?: string;
   command?: string;
+  prelaunchCommand?: string;
   args?: string[];
   prompt?: string;
   env?: Record<string, string>;
@@ -20,6 +21,7 @@ export interface SessionSnapshot {
   kind: AgentKind;
   name: string;
   command: string;
+  prelaunchCommand?: string;
   args: string[];
   cwd: string;
   status: SessionStatus;
@@ -78,6 +80,7 @@ export interface AgentProfile {
   kind: AgentKind;
   cwd: string;
   command?: string;
+  prelaunchCommand?: string;
   args: string[];
   env: Record<string, string>;
   createdAt: string;
@@ -89,6 +92,7 @@ export interface AgentProfileInput {
   kind: AgentKind;
   cwd?: string;
   command?: string;
+  prelaunchCommand?: string;
   args?: string[];
   env?: Record<string, string>;
 }
